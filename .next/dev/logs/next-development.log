@@ -1,0 +1,29 @@
+[00:00:00.836] Server  LOG     ✓ Ready in 538ms
+[00:00:08.157] Server  LOG     ○ Compiling / ...
+[00:00:09.414] Server  WARN    ⚠ ./tailwind.config.js:34:13
+Module not found: Can't resolve 'tailwindcss-animate'
+  32 |     },
+  33 |   },
+> 34 |   plugins: [require("tailwindcss-animate")],
+     |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  35 | }
+
+
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+[00:00:12.344] Server  WARN    ⚠ ./tailwind.config.js:34:13
+Module not found: Can't resolve 'tailwindcss-animate'
+  32 |     },
+  33 |   },
+> 34 |   plugins: [require("tailwindcss-animate")],
+     |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  35 | }
+
+
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+[00:00:12.515] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold

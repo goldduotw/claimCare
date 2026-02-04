@@ -1,0 +1,36 @@
+// Ensure your price ID is exported for use in other components
+export const STRIPE_PRICE_ID = 'price_1SpgLYF1JPfHP5JnkoIJ5Oyv';
+
+/**
+ * Starts the payment process by calling our Next.js API route.
+ * This replaces the direct Firestore-Stripe library call.
+ */
+export const startPayment = async (auditId: string) => {
+  try {
+    console.log("Initiating payment for audit:", auditId);
+
+    // We call our internal API route which will handle the Stripe session creation
+    const response = await fetch('/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        auditId: auditId,
+        priceId: STRIPE_PRICE_ID,
+      }),
+    });
+
+    const session = await response.json();
+
+    if (session.url) {
+      // Redirect the user to Stripe Checkout
+      window.location.assign(session.url);
+    } else {
+      throw new Error("Failed to create checkout session");
+    }
+  } catch (error) {
+    console.error("Stripe Checkout Error:", error);
+    alert("There was an issue connecting to Stripe. Please try again.");
+  }
+};
