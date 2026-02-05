@@ -35,7 +35,7 @@ export default function Home() {
 
   return (
     <div className="flex min-h-screen w-full flex-col bg-muted/40">
-      <header className="sticky top-0 z-10 flex h-16 items-center gap-4 border-b bg-background px-4 md:px-6">
+      <header className="sticky top-0 z-50 flex h-16 items-center gap-4 border-b bg-white px-4 md:px-6 w-full">
         <div className="flex items-center gap-2 text-lg font-medium">
           <a href="#" className="flex items-center gap-2 text-lg font-semibold text-primary-foreground">
             <div className="bg-primary rounded-md p-1.5">
@@ -45,18 +45,17 @@ export default function Home() {
           </a>
         </div>
       </header>
-      <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8">
-        <Alert variant="destructive" className="bg-yellow-100 border-yellow-400 text-yellow-800 [&>svg]:text-yellow-800 dark:bg-yellow-900/50 dark:border-yellow-700 dark:text-yellow-300 dark:[&>svg]:text-yellow-300">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle className="font-bold">Developer Mode</AlertTitle>
-          <AlertDescription>
-            This is a prototype tool for educational use. Do not upload sensitive personal data.
-          </AlertDescription>
-        </Alert>
-        <div className="flex items-center">
+{/* Add mt-16 to offset the sticky header */}
+      <main className="flex-1 pt-6 px-4 md:px-8 max-w-5xl mx-auto w-full relative z-0">
+
+        <div className="flex items-center mb-6">
           <h1 className="text-2xl font-semibold md:text-3xl font-headline">Medical Bill Audit</h1>
         </div>
 
+        {/* This wrapper ensures the analyzer doesn't bleed into the header */}
+        <div className="bg-background rounded-xl shadow-sm border p-1 relative z-[9999] pointer-events-auto">
+          <BillAnalyzer /> 
+        </div>
       </main>
       <footer className="flex flex-col gap-2 sm:flex-row py-6 w-full shrink-0 items-center px-4 md:px-6 border-t">
         <p className="text-xs text-muted-foreground">

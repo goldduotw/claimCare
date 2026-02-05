@@ -7,13 +7,14 @@ import { Textarea } from '../components/ui/textarea';
 import { Button } from '../components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert';
 import { analyzeBill } from '../app/actions';
-import { Loader2, AlertTriangle, Lightbulb, Download, Camera, X, FileText, PlusCircle, UserSquare, TestTube2, CheckCircle2 } from 'lucide-react';
+import { Loader2, AlertTriangle, Lightbulb, Download, Camera, X, FileText, PlusCircle, UserSquare, TestTube2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { ReceptionistViewModal, DiscrepancyDetails } from './receptionist-view-modal';
 import { useToast } from '../hooks/use-toast';
 import { useSearchParams, useRouter } from 'next/navigation';
+import ReactMarkdown from 'react-markdown';
 
 // Simple markdown table parser
 function parseMarkdownTable(markdown: string): { headers: string[], rows: string[][] } {
@@ -64,7 +65,7 @@ export function BillAnalyzer() {
   const [imageData, setImageData] = useState<string | null>(null);
   const [insurancePdfData, setInsurancePdfData] = useState<string | null>(null);
   const [insurancePdfFile, setInsurancePdfFile] = useState<File | null>(null);
-  const [analysisResult, setAnalysisResult] = useState<{markdown: string, discrepancy: DiscrepancyDetails | null} | null>(null);
+  const [analysisResult, setAnalysisResult] = useState<{markdown: string, discrepancy: DiscrepancyDetails | null, logicTrace?: string[]} | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [showInsuranceUpload, setShowInsuranceUpload] = useState(false);
@@ -72,9 +73,6 @@ export function BillAnalyzer() {
   const analysisRef = useRef<HTMLDivElement>(null);
   const billFileInputRef = useRef<HTMLInputElement>(null);
   const insuranceFileInputRef = useRef<HTMLInputElement>(null);
-  // const storage = useStorage();
-  // const firestore = useFirestore();
-  // const { user } = useUser();
   const user = { uid: 'dev-user' };
   const { toast } = useToast();
   const searchParams = useSearchParams();
@@ -104,7 +102,6 @@ useEffect(() => {
       fetchAudit();
     }
   }, [searchParams]);
-   // Removed 'user' to avoid the 'id unknown' error if auth isn't ready
 
 const uploadBill = async (dataUrl: string): Promise<string> => {
   return dataUrl; 
@@ -120,14 +117,6 @@ const uploadBill = async (dataUrl: string): Promise<string> => {
 
       try {
           if (imageData) {
-              if (!user) {
-                  toast({
-                      variant: 'destructive',
-                      title: 'Authentication Required',
-                      description: 'Please sign in to upload and analyze an image of your bill.',
-                  });
-                  return;
-              }
               const storageUrl = await uploadBill(imageData);
               analysisInput.imageData = storageUrl;
               analysisInput.billText = ''; // Prioritize image over text
@@ -139,9 +128,10 @@ const uploadBill = async (dataUrl: string): Promise<string> => {
             setAnalysisResult({
               markdown: result.data.analysisMarkdown,
               discrepancy: result.data.discrepancyDetails || null,
+              logicTrace: (result.data as any).logicTrace || []
             });
           } else {
-            setError(result.error);
+            setError((result as any).error || "An error occurred");
           }
       } catch (e: any) {
           console.error("Audit failed:", e);
@@ -227,95 +217,54 @@ const uploadBill = async (dataUrl: string): Promise<string> => {
 
   const canAudit = (billText.trim().length > 0 || imageData !== null) && !isPending;
   
-const renderAnalysis = () => {
-    if (!analysisResult?.markdown) return null;
+const renderAnalysis = (analysisResult: any) => {
+  if (!analysisResult?.markdown) return null;
 
-    // 1. Split the markdown into lines and isolate the data rows
-    const allLines = analysisResult.markdown.split('\n');
-    const dataRows = allLines.filter(row => row.includes('|') && !row.includes('Line Item') && !row.includes('---'));
-
-    // 2. Identify rows with actual savings (exclude $0.00 and "no issue found")
-    const actualIssues = dataRows.filter(row => {
-      const lowerRow = row.toLowerCase();
-      return !lowerRow.includes('$0.00') && !lowerRow.includes('no issue found');
-    });
-
-    // 3. CASE: Real overcharges found (e.g., your $450 office visit)
-    if (analysisResult.discrepancy && actualIssues.length > 0) {
-      return (
-        <Alert variant="destructive" className="bg-red-50 border-red-200 text-red-900 shadow-sm">
-          <AlertTriangle className="h-4 w-4 text-red-600" />
-          <AlertTitle className="font-bold">Point-of-Sale Discrepancy Found!</AlertTitle>
-          <AlertDescription>
-            <div className="mt-3 space-y-2">
-              {actualIssues.map((row, i) => {
-                const cols = row.split('|').map(c => c.trim()).filter(Boolean);
-                return (
-                  <div key={i} className="flex justify-between items-center bg-white/60 p-3 rounded-md border border-red-100">
-                    <div className="flex flex-col">
-                      <span className="font-bold text-slate-900">{cols[0]}</span>
-                      <span className="text-sm text-red-700 font-medium">{cols[1]}</span>
-                    </div>
-                    <div className="bg-red-600 text-white px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">
-                      Save {cols[2]}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            <Button 
-              type="button" 
-              className="mt-4 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold h-11" 
-              onClick={() => setShowReceptionistView(true)}
-            >
-              <UserSquare className="mr-2 h-4 w-4" />
-              Verify with Front Desk
-            </Button>
-          </AlertDescription>
-        </Alert>
-      );
-    }
-
-    // 4. CASE: No overcharges (e.g., your $120 metabolic panel)
-    const tableData = parseMarkdownTable(analysisResult.markdown);
-
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-lg text-green-800">
-          <CheckCircle2 className="h-5 w-5 text-green-600" />
-          <span className="text-sm font-medium">Audit complete: No significant overcharges detected in this bill.</span>
-        </div>
-
-        {tableData.headers.length > 0 && (
-          <div className="rounded-xl border border-slate-200 overflow-hidden bg-white shadow-sm">
-            <Table>
-              <TableHeader className="bg-slate-50">
-                <TableRow>
-                  {tableData.headers.map((header, index) => (
-                    <TableHead key={index} className="font-bold text-slate-700">{header}</TableHead>
-                  ))}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {tableData.rows.map((row, rowIndex) => (
-                  <TableRow key={rowIndex}>
-                    {row.map((cell, cellIndex) => (
-                      <TableCell key={cellIndex} className="text-slate-600">
-                        <div dangerouslySetInnerHTML={{ __html: cell.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }} />
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
-      </div>
-      
-    );
-  };
+  // 1. Extract potential issues from the AI data
+  const logicIssues = analysisResult.logicTrace || [];
+  const allLines = analysisResult.markdown.split('\n');
+  const tableLines = allLines.filter((line: string) => line.includes('|') && !line.includes('---'));
+  
+  // 2. Combine issues to trigger the Red Alert
+  const actualIssues = [...logicIssues, ...tableLines].filter((issue: string) => {
+    const lower = issue.toLowerCase();
+    return lower.includes('flag') || (lower.includes('|') && !lower.includes('$0.00'));
+  });
 
   return (
+    <div className="mt-8 space-y-6">
+      {/* 3. The Point-of-Sale Alert and Verify Button */}
+      {actualIssues.length > 0 && (
+        <Alert variant="destructive" className="bg-red-50 border-red-200 text-red-900 shadow-sm flex items-center justify-between p-6">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="h-5 w-5 text-red-600" />
+            <div>
+              <AlertTitle className="font-bold text-lg">Point-of-Sale Discrepancy Found</AlertTitle>
+              <AlertDescription className="text-red-700">
+                Our AI detected potential unbundling or overcharges.
+              </AlertDescription>
+            </div>
+          </div>
+          
+          <Button 
+            variant="destructive"
+            className="bg-red-600 hover:bg-red-700 text-white font-bold px-6 py-2 rounded-full transition-all"
+            onClick={() => setShowReceptionistView(true)}
+          >
+            Verify with Front Desk
+          </Button>
+        </Alert>
+      )}
+
+      {/* 4. The full AI Table results */}
+      <div className="prose max-w-none dark:prose-invert">
+        <ReactMarkdown>{analysisResult.markdown}</ReactMarkdown>
+      </div>
+    </div>
+  );
+};
+
+  return (    
     <div className="grid gap-6">
       <Card>
         <CardHeader>
@@ -397,7 +346,7 @@ const renderAnalysis = () => {
                   </Button>
                 )}
               <div className="flex gap-2 flex-wrap">
-                <Button type="submit" size="lg" disabled={!canAudit}>
+                <Button type="submit" size="lg" disabled={!canAudit} className="opacity-100 pointer-events-auto bg-blue-600 text-white hover:bg-blue-700 !visible block">
                   {isPending ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -409,11 +358,11 @@ const renderAnalysis = () => {
                 </Button>
                 {analysisResult?.markdown && (
                   <>
-                    <Button type="button" size="lg" variant="outline" onClick={handleSavePdf} disabled={isPending}>
+                    <Button type="button" size="lg" variant="outline" onClick={handleSavePdf} disabled={isPending} className="opacity-100 pointer-events-auto !visible">
                       <Download className="mr-2 h-4 w-4" />
                       Save to PDF
                     </Button>
-                    <Button type="button" size="lg" variant="secondary" onClick={openTestModal} disabled={isPending}>
+                    <Button type="button" size="lg" variant="secondary" onClick={openTestModal} disabled={isPending} className="opacity-100 pointer-events-auto !visible">
                     <Lightbulb className="mr-2 h-4 w-4" />
                       Unlock Advocacy Card ($2.99)
                     </Button>
@@ -421,7 +370,8 @@ const renderAnalysis = () => {
                 )}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                Images are processed in real-time and never stored on our servers.
+                This is a prototype tool for educational use. Do not upload sensitive personal data.<br />
+                Images are processed in real-time and never stored on our servers. 
               </p>
             </div>
           </form>
@@ -454,7 +404,7 @@ const renderAnalysis = () => {
         </Alert>
       )}
 
-      {analysisResult?.markdown && !analysisResult?.discrepancy && (
+      {analysisResult?.markdown && (
         <Card className="animate-in fade-in-50 duration-500">
           <CardHeader className="flex flex-row items-start gap-4">
              <div className="bg-primary/20 p-2 rounded-full">
@@ -462,25 +412,13 @@ const renderAnalysis = () => {
              </div>
             <div>
                 <CardTitle>Potential Savings Identified</CardTitle>
-                <CardDescription>Based on our analysis, we found the following potential issues.</CardDescription>
+                <CardDescription>Based on our analysis, we found potential issues.</CardDescription>
             </div>
           </CardHeader>
           <CardContent ref={analysisRef}>
-            {renderAnalysis()}
+            {renderAnalysis(analysisResult)}
           </CardContent>
         </Card>
-      )}
-      
-      {analysisResult?.markdown && analysisResult?.discrepancy && (
-         <Card className="animate-in fade-in-50 duration-500">
-           <CardHeader>
-                <CardTitle>Discrepancy Found!</CardTitle>
-                <CardDescription>Our analysis found a point-of-sale discrepancy.</CardDescription>
-           </CardHeader>
-           <CardContent ref={analysisRef}>
-             {renderAnalysis()}
-           </CardContent>
-         </Card>
       )}
 
       {showReceptionistView && (
@@ -488,11 +426,9 @@ const renderAnalysis = () => {
             isOpen={showReceptionistView}
             onClose={() => setShowReceptionistView(false)}
             details={analysisResult?.discrepancy || sampleDiscrepancyForTesting}
-            analysisTable={analysisResult?.markdown || '| Line Item | Potential Issue | Estimated Savings |\n|---|---|---|\n| Office Visit | Overcharged Co-pay | $80.00 |'}
+            analysisTable={analysisResult?.markdown || ''}
         />
       )}
     </div>
   );
 }
-
-    

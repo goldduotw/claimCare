@@ -1,29 +1,5 @@
-[00:00:00.836] Server  LOG     ✓ Ready in 538ms
-[00:00:08.157] Server  LOG     ○ Compiling / ...
-[00:00:09.414] Server  WARN    ⚠ ./tailwind.config.js:34:13
-Module not found: Can't resolve 'tailwindcss-animate'
-  32 |     },
-  33 |   },
-> 34 |   plugins: [require("tailwindcss-animate")],
-     |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  35 | }
-
-
-
-https://nextjs.org/docs/messages/module-not-found
-
-
-[00:00:12.344] Server  WARN    ⚠ ./tailwind.config.js:34:13
-Module not found: Can't resolve 'tailwindcss-animate'
-  32 |     },
-  33 |   },
-> 34 |   plugins: [require("tailwindcss-animate")],
-     |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  35 | }
-
-
-
-https://nextjs.org/docs/messages/module-not-found
-
-
-[00:00:12.515] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:00:08.605] Server  LOG     ✓ Ready in 7.9s
+[00:00:11.633] Server  LOG     ○ Compiling / ...
+[00:00:38.597] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:00:42.649] Server  LOG     AI Input Text: "2024-06-15\tRemoval of Skin Lesion (0.6cm - 1.0cm)\t11401\t$620.00\n2024-06-15\tSurgical Tray / Supplies\tA4550\t$150.00\n2024-06-15\tSimple Repair (Stitches)\t12001\t$295.00"
+[00:00:50.061] Server  LOG     AI Output Result: "{\n  \"analysisMarkdown\": \"| Line Item | Potential Issue | Estimated Savings |\\n|---|---|---|\\n| Simple Repair (Stitches) - 12001 | Unbundling | $295.00 |\\n| Surgical Tray / Supplies - A4550 | Unbundling / Inclusive Service | $150.00 |\",\n  \"logicTrace\": [\n    \"Flag: Unbundling. Reason: CPT 12001 (Simple Repair) is generally considered an integral component of CPT 11401 (Excision of Skin Lesion) when performed at the same site for the same lesion, according to NCCI Procedure-to-Procedure (PTP) edits. Separate billing without a distinct modifier (e.g., 59) is typically inappropriate. Reference: National Correct Coding Initiative guidelines.\",\n    \"Flag: Unbundling / Inclusive Service. Reason: HCPCS A4550 (Surgical Tray) is often considered bundled into the primary surgical procedure (CPT 11401) by many payers. The cost of routine supplies and a surgical tray is typically included in the practice expense component of the reimbursement for the primary procedure. Reference: Common payer policies and medical billing guidelines.\"\n  ]\n}"
