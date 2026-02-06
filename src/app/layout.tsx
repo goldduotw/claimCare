@@ -5,7 +5,7 @@ import { Toaster } from "../components/ui/toaster"
 
 export const metadata: Metadata = {
   title: 'GoldDuo - Medical Claim Audits',
-  description: 'Fix your medical billing errors for $2.99',
+  description: 'Fix your medical billing errors for $3.99/mon',
   icons: {
     icon: '/icon.png', // The browser will scale this for the tab
     apple: '/icon.png', // Specifically for iPhone/iPad home screens

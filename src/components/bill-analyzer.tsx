@@ -78,30 +78,35 @@ export function BillAnalyzer() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
+   const [currentAuditId, setCurrentAuditId] = useState<string | null>(null);
+// console.log("DEBUG: Current state of currentAuditId:", currentAuditId);
+// console.log("DEBUG: auditId found in URL searchParams:", searchParams.get('id'));
+
+const fetchAudit = async (id: string) => {
+  const { data, error } = await supabase
+    .from('audits')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (data && !error) {
+    setAnalysisResult({
+      markdown: data.analysis_table,
+      discrepancy: data.status, 
+    });
+    setShowReceptionistView(true);
+  }
+};
 
 // Final combined Effect to handle Post-Payment and Post-Login restoration
 useEffect(() => {
-    const auditId = searchParams.get('auditId');
-    
-    if (auditId) {
-      const fetchAudit = async () => {
-        const { data, error } = await supabase
-          .from('audits')
-          .select('*')
-          .eq('id', auditId)
-          .single();
-
-        if (data && !error) {
-          setAnalysisResult({
-            markdown: data.analysis_table, // Matches your DB exactly
-            discrepancy: data.status,       // Placeholder until you add details column
-          });
-          setShowReceptionistView(true);
-        }
-      };
-      fetchAudit();
-    }
-  }, [searchParams]);
+  const idFromUrl = searchParams.get('id');
+  if (idFromUrl) {
+    // Sync the URL ID into our State so the rest of the app can use it
+    setCurrentAuditId(idFromUrl);
+    fetchAudit(idFromUrl);
+  }
+}, [searchParams]);
 
 const uploadBill = async (dataUrl: string): Promise<string> => {
   return dataUrl; 
@@ -124,13 +129,29 @@ const uploadBill = async (dataUrl: string): Promise<string> => {
 
           const result = await analyzeBill(analysisInput);
 
-          if (result.success) {
-            setAnalysisResult({
-              markdown: result.data.analysisMarkdown,
-              discrepancy: result.data.discrepancyDetails || null,
-              logicTrace: (result.data as any).logicTrace || []
-            });
-          } else {
+      if (result.success) {
+        // 1. First, save to Supabase to get the ID
+        const { data, error: saveError } = await supabase
+          .from('audits')
+          .insert({
+            analysis_table: result.data.analysisMarkdown,
+            status: 'locked'
+          })
+          .select()
+          .single();
+
+        // 2. If save was successful, update the ID state
+        if (data) {
+          setCurrentAuditId(data.id); // This fixes the 'null' in your logs
+        }
+
+        // 3. KEEP THIS: This is your original 'else' logic that renders the UI
+        setAnalysisResult({
+          markdown: result.data.analysisMarkdown,
+          discrepancy: result.data.discrepancyDetails || null,
+          logicTrace: (result.data as any).logicTrace || []
+        });
+      } else {
             setError((result as any).error || "An error occurred");
           }
       } catch (e: any) {
@@ -304,7 +325,7 @@ const renderAnalysis = (analysisResult: any) => {
                 className="hidden"
                 disabled={isPending}
               />
-              <Button type="button" variant="outline" className="mt-2" onClick={() => billFileInputRef.current?.click()} disabled={isPending}>
+              <Button type="button" variant="outline" className="mt-2 hover:bg-slate-900 hover:text-white" onClick={() => billFileInputRef.current?.click()} disabled={isPending}>
                 <Camera className="mr-2 h-4 w-4" />
                 Camera / Upload
               </Button>
@@ -358,13 +379,13 @@ const renderAnalysis = (analysisResult: any) => {
                 </Button>
                 {analysisResult?.markdown && (
                   <>
-                    <Button type="button" size="lg" variant="outline" onClick={handleSavePdf} disabled={isPending} className="opacity-100 pointer-events-auto !visible">
+                    <Button type="button" size="lg" variant="outline" onClick={handleSavePdf} disabled={isPending} className="opacity-100 cursor-pointer text-slate-900 hover:bg-slate-900 hover:text-white transition-all duration-200 !visible">
                       <Download className="mr-2 h-4 w-4" />
                       Save to PDF
                     </Button>
-                    <Button type="button" size="lg" variant="secondary" onClick={openTestModal} disabled={isPending} className="opacity-100 pointer-events-auto !visible">
+                    <Button type="button" size="lg" variant="outline" onClick={openTestModal} disabled={isPending} className="opacity-100 cursor-pointer hover:bg-slate-900 hover:text-white transition-all duration-200 !visible">
                     <Lightbulb className="mr-2 h-4 w-4" />
-                      Unlock Advocacy Card ($2.99)
+                      Unlock Advocacy Card ($3.99/mon)
                     </Button>
                   </>
                 )}
@@ -425,8 +446,11 @@ const renderAnalysis = (analysisResult: any) => {
         <ReceptionistViewModal
             isOpen={showReceptionistView}
             onClose={() => setShowReceptionistView(false)}
+            // STOP using 'auditId' (from URL) and START using 'currentAuditId' (from State)
+            auditId={currentAuditId ?? undefined} 
             details={analysisResult?.discrepancy || sampleDiscrepancyForTesting}
             analysisTable={analysisResult?.markdown || ''}
+            onLoginAttempt={() => {}}
         />
       )}
     </div>

@@ -1,5 +1,6 @@
+import Stripe from "stripe";
 // Ensure your price ID is exported for use in other components
-export const STRIPE_PRICE_ID = 'price_1SpgLYF1JPfHP5JnkoIJ5Oyv';
+export const STRIPE_PRICE_ID = 'price_1St9DXIfd6AnPI39bhYpzt6P';
 
 /**
  * Starts the payment process by calling our Next.js API route.
@@ -10,7 +11,7 @@ export const startPayment = async (auditId: string) => {
     console.log("Initiating payment for audit:", auditId);
 
     // We call our internal API route which will handle the Stripe session creation
-    const response = await fetch('/api/stripe/create-checkout', {
+    const response = await fetch('/api/checkout', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -34,3 +35,10 @@ export const startPayment = async (auditId: string) => {
     alert("There was an issue connecting to Stripe. Please try again.");
   }
 };
+
+const stripeSecretKey = process.env.STRIPE_SECRET_KEY!;
+
+export const stripe = new Stripe(stripeSecretKey, {
+  // @ts-ignore
+  apiVersion: '2025-01-27.acacia',
+});

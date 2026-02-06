@@ -33,6 +33,7 @@ type ReceptionistViewModalProps = {
   details: DiscrepancyDetails;
   analysisTable: string;
   auditId?: string; 
+  onLoginAttempt?: () => void;
 };
 
 function parseMarkdownTable(markdown: string): { headers: string[], rows: string[][] } {
@@ -48,7 +49,7 @@ function parseMarkdownTable(markdown: string): { headers: string[], rows: string
     return { headers, rows };
 }
 
-export function ReceptionistViewModal({ isOpen, onClose, details, analysisTable, auditId }: ReceptionistViewModalProps) {
+export function ReceptionistViewModal({ isOpen, onClose, details, analysisTable, auditId, onLoginAttempt }: ReceptionistViewModalProps) {
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState<'pending' | 'paid'>('pending');
@@ -109,7 +110,14 @@ export function ReceptionistViewModal({ isOpen, onClose, details, analysisTable,
   }, [isOpen, auditId]);
 
   const handleGoogleSignIn = async () => {
-    localStorage.setItem('pending_audit_data', JSON.stringify({ details, analysisTable, auditId }));
+    // 3. Trigger the save function from the parent
+    if (onLoginAttempt) onLoginAttempt();
+    // 4. Update this key to match BillAnalyzer's "pending_audit_results"
+    localStorage.setItem('pending_audit_results', JSON.stringify({ 
+      markdown: analysisTable, 
+      discrepancy: details 
+    }));
+ //   localStorage.setItem('pending_audit_data', JSON.stringify({ details, analysisTable, auditId }));
     await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: { 
@@ -128,7 +136,8 @@ export function ReceptionistViewModal({ isOpen, onClose, details, analysisTable,
         const response = await fetch('/api/checkout', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ auditId }), 
+            body: JSON.stringify({ auditId: auditId }), 
+            credentials: 'include'
         });
         const { url } = await response.json();
         if (url) window.location.assign(url);
@@ -143,8 +152,9 @@ export function ReceptionistViewModal({ isOpen, onClose, details, analysisTable,
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-4xl bg-white text-gray-900 max-h-[90vh] overflow-y-auto">
+<div className="flex-1 overflow-y-auto">        
+
         {showConfetti && <Confetti recycle={false} numberOfPieces={500} />}
-        
         <div className="relative">
             {/* Main Report Content */}
             <div ref={modalContentRef} className={`p-8 transition-all duration-700 ${!isUnlocked ? 'blur-2xl pointer-events-none opacity-50' : 'blur-0 opacity-100'}`}>
@@ -208,9 +218,10 @@ export function ReceptionistViewModal({ isOpen, onClose, details, analysisTable,
                         ) : (
                             <div className="flex flex-col items-center">
                                 <h3 className="text-2xl font-black mb-2 text-gray-900 text-center tracking-tight">Locked Report</h3>
-                                <p className="text-gray-500 mb-6 text-xs text-center leading-relaxed">Unlock the full advocacy card for a one-time fee.</p>
+                                <p className="text-gray-500 mb-6 text-xs text-center leading-relaxed">Unlock the full advocacy card for a monthly fee.<br />Cancel at anytime.<br />The accuracy of this audit is approximately 80%. 
+     Use your discretion when reviewing these findings.</p>
                                 <Button size="lg" className="bg-green-600 hover:bg-green-700 w-full font-extrabold py-7 text-xl shadow-xl" onClick={handleCheckout} disabled={isCheckingOut}>
-                                    {isCheckingOut ? <Loader2 className="animate-spin h-5 w-5" /> : "Unlock for $2.99"}
+                                    {isCheckingOut ? <Loader2 className="animate-spin h-5 w-5" /> : "Unlock for $3.99/mon"}
                                 </Button>
                             </div>
                         )}
@@ -218,13 +229,13 @@ export function ReceptionistViewModal({ isOpen, onClose, details, analysisTable,
                  </div>
             )}
         </div>
-
+</div>
         <DialogFooter className="px-8 pb-8 pt-4">
             <Button variant="outline" className="flex-1 font-bold" onClick={() => {}} disabled={!isUnlocked}>
                 <Share className="mr-2 h-4 w-4" /> Export Advocacy Card
             </Button>
             <DialogClose asChild>
-                <Button variant="ghost" className="flex-1 font-semibold">Close</Button>
+                <Button variant="outline" className="flex-1 font-semibold">Close</Button>
             </DialogClose>
         </DialogFooter>
       </DialogContent>

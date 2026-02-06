@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
+import { STRIPE_PRICE_ID } from '../../../lib/stripe';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2023-10-16' as any,
@@ -19,9 +20,17 @@ export async function POST(req: Request) {
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
-          get(name: string) {
-            return cookieStore.get(name)?.value;
-          },
+          getAll() { return cookieStore.getAll() },
+setAll(cookiesToSet) {
+        try {
+          cookiesToSet.forEach(({ name, value, options }) =>
+            cookieStore.set(name, value, options)
+          )
+        } catch (error) {
+          // The setAll method may be called from a Server Component
+          // This can be ignored if you have middleware refreshing user sessions
+        }
+      },
         },
       }
     );
@@ -32,11 +41,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       line_items: [
         {
-          price: 'price_YOUR_ACTUAL_ID_HERE', // Add your Stripe Price ID here
+          price: STRIPE_PRICE_ID, // Add your Stripe Price ID here
           quantity: 1,
         },
       ],
@@ -45,8 +55,9 @@ export async function POST(req: Request) {
         userId: user.id,
         auditId: auditId,
       },
+
       success_url: `${process.env.NEXT_PUBLIC_SITE_URL}/audit/${auditId}?success=true`,
-      cancel_url: `${process.env.NEXT_PUBLIC_SITE_URL}/audit/${auditId}`,
+      cancel_url: `${process.env.NEXT_PUBLIC_SITE_URL}/audit/${auditId}?canceled=true`,
     });
 
     return NextResponse.json({ url: session.url });
