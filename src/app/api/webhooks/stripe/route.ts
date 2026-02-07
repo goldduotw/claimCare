@@ -11,6 +11,7 @@ export async function POST(req: Request) {
 
   let event;
 
+
   try {
     event = stripe.webhooks.constructEvent(
       body,
@@ -22,36 +23,44 @@ export async function POST(req: Request) {
     return new NextResponse(`Webhook Error: ${error.message}`, { status: 400 });
   }
 
-  if (event.type === "checkout.session.completed") {
+if (event.type === "checkout.session.completed") {
+
     const session = event.data.object as any;
-    
-    const auditId = session.metadata?.auditId;
-    const userId = session.metadata?.userId;
-    // This is the medical bill amount (e.g. 450.00) you passed from checkout
-    const medicalBillAmount = session.metadata?.billedAmount || '0.00'; 
-    // This is the $3.99 fee the user just paid on Stripe
-    const stripeFee = session.amount_total ? (session.amount_total / 100).toFixed(2) : '3.99';
+    const metadata = session.metadata;
+    console.log("CHECKING SUITCASE:", metadata);
+    console.log("🔍 THE SUITCASE CHECK:");
+    console.log("Is metadata empty?", !metadata || Object.keys(metadata).length === 0);
+    console.log("Total Amount found:", metadata?.totalAmount);
+    console.log("Suggested Amount found:", metadata?.suggestedAmount);
+
+    // 1. Unpack exactly what we sent from the checkout route
+    const auditId = metadata?.auditId;
+    const userId = metadata?.userId;
+    const totalAmount = metadata?.totalAmount;       // The $1250
+    const suggestedAmount = metadata?.suggestedAmount; // The Suggested Number
+    const analysisData = metadata?.analysisData;     // The Table
 
     if (auditId) {
-      console.log(`Payment confirmed! Unlocking Audit: ${auditId} for User: ${userId}`);
-      
+      console.log(`Unlocking Audit: ${auditId} | Billed: ${totalAmount}`);
+
       const { error } = await supabase
         .from('audits')
         .update({ 
           status: 'paid', 
           is_unlocked: true,
-          expected_amount: medicalBillAmount, // Corrected: Hospital bill goes here
-          billed_amount: stripeFee,           // Corrected: Stripe fee goes here
+          billed_amount: metadata?.totalAmount,      // Matches checkout
+          expected_amount: metadata?.suggestedAmount, // Matches checkout
+          analysis_table: metadata?.analysisData,    // Matches checkout
           user_id: userId,
-          patient_name: session.customer_details?.name || 'Patient'
+          patient_name: session.customer_details?.name || 'Valued Patient'
         })
         .eq('id', auditId);
 
-      if (error) {
-        console.error("Database update failed:", error);
-      }
+      if (error) console.error("Database update failed:", error);
     }
   }
 
   return new NextResponse("Success", { status: 200 });
 }
+
+

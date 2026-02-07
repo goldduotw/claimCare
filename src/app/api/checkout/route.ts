@@ -10,52 +10,44 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 
 export async function POST(req: Request) {
   try {
-    const { auditId } = await req.json();
-    
-    // Fix for Next.js 15: cookies() is now a Promise
-    const cookieStore = await cookies();
+    // 1. EXTRACT ALL DATA (Not just auditId)
+  //  const { auditId, totalAmount, suggestedAmount, analysisData } = await req.json();
+    const { auditId, billedAmount, expectedAmount, analysisMarkdown } = await req.json();
 
+    const cookieStore = await cookies();
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
           getAll() { return cookieStore.getAll() },
-setAll(cookiesToSet) {
-        try {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            cookieStore.set(name, value, options)
-          )
-        } catch (error) {
-          // The setAll method may be called from a Server Component
-          // This can be ignored if you have middleware refreshing user sessions
-        }
-      },
+          setAll(cookiesToSet) {
+            try {
+              cookiesToSet.forEach(({ name, value, options }) =>
+                cookieStore.set(name, value, options)
+              )
+            } catch (error) {}
+          },
         },
       }
     );
 
     const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
-      line_items: [
-        {
-          price: STRIPE_PRICE_ID, // Add your Stripe Price ID here
-          quantity: 1,
-        },
-      ],
+      line_items: [{ price: STRIPE_PRICE_ID, quantity: 1 }],
       mode: 'subscription',
-      metadata: {
+      // 2. PACK THE SUITCASE: Add the medical bill data here
+      metadata: {      
         userId: user.id,
         auditId: auditId,
+        // Wrap these in String() so Stripe doesn't drop them
+        totalAmount: String(billedAmount || "0.00"),      
+        suggestedAmount: String(expectedAmount || "0.00"), 
+        analysisData: String(analysisMarkdown || "").substring(0, 450), // Stripe limit is 500 chars
       },
-
       success_url: `${process.env.NEXT_PUBLIC_SITE_URL}/audit/${auditId}?success=true`,
       cancel_url: `${process.env.NEXT_PUBLIC_SITE_URL}/audit/${auditId}?canceled=true`,
     });

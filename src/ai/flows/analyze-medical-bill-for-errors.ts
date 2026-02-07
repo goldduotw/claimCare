@@ -38,6 +38,9 @@ const AnalyzeMedicalBillForErrorsOutputSchema = z.object({
     .describe(
       'A markdown table with columns for "Line Item", "Potential Issue", and "Estimated Savings".'
     ),
+    id: z.string().optional(),
+    totalBilledAmount: z.string().describe("The total sum of all billed items (e.g. 1065.00)"),
+    totalExpectedAmount: z.string().describe("The total sum of what the patient should pay (e.g. 620.00)"),
     discrepancyDetails: z.object({
         patientName: z.string().optional().describe("The patient's name, if found."),
         expectedAmount: z.string().optional().describe("The expected co-pay or cost."),

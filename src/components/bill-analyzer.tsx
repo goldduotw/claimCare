@@ -1,5 +1,6 @@
 "use client";
 
+import { useParams } from 'next/navigation';
 import { supabase } from '../lib/supabaseClient'; 
 import { useState, useTransition, useRef, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
@@ -15,6 +16,18 @@ import { ReceptionistViewModal, DiscrepancyDetails } from './receptionist-view-m
 import { useToast } from '../hooks/use-toast';
 import { useSearchParams, useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
+
+interface AnalysisResult {
+  markdown: string;
+  totalBilled: number;    // This will hold our $1065.00 [cite: 2026-01-27]
+  totalExpected: number;  // This will hold our $620.00 [cite: 2026-01-27]
+  discrepancyDetails?: {
+    patientName?: string;
+    expectedAmount?: string;
+    billedAmount?: string;
+    planReference?: string;
+  };
+}
 
 // Simple markdown table parser
 function parseMarkdownTable(markdown: string): { headers: string[], rows: string[][] } {
@@ -61,11 +74,15 @@ const sampleDiscrepancyForTesting: DiscrepancyDetails = {
 
 
 export function BillAnalyzer() {
+  const params = useParams();
+  const auditId = params?.id as string;
+
   const [billText, setBillText] = useState('');
   const [imageData, setImageData] = useState<string | null>(null);
   const [insurancePdfData, setInsurancePdfData] = useState<string | null>(null);
   const [insurancePdfFile, setInsurancePdfFile] = useState<File | null>(null);
-  const [analysisResult, setAnalysisResult] = useState<{markdown: string, discrepancy: DiscrepancyDetails | null, logicTrace?: string[]} | null>(null);
+ // const [analysisResult, setAnalysisResult] = useState<{markdown: string, discrepancy: DiscrepancyDetails | null, logicTrace?: string[]} | null>(null);
+  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [showInsuranceUpload, setShowInsuranceUpload] = useState(false);
@@ -91,8 +108,10 @@ const fetchAudit = async (id: string) => {
 
   if (data && !error) {
     setAnalysisResult({
-      markdown: data.analysis_table,
-      discrepancy: data.status, 
+      markdown: data.analysis_table || '',
+      totalBilled: data.total_billed || 0,
+      totalExpected: data.total_expected || 0,
+      discrepancyDetails: data.discrepancy_details
     });
     setShowReceptionistView(true);
   }
@@ -113,6 +132,7 @@ const uploadBill = async (dataUrl: string): Promise<string> => {
 };
 
   const handleAudit = async (event: React.FormEvent<HTMLFormElement>) => {
+ 
     event.preventDefault();
     setError(null);
     setAnalysisResult(null);
@@ -128,30 +148,45 @@ const uploadBill = async (dataUrl: string): Promise<string> => {
           }
 
           const result = await analyzeBill(analysisInput);
+          console.log("AI RAW RESULT:", result);
 
-      if (result.success) {
-        // 1. First, save to Supabase to get the ID
-        const { data, error: saveError } = await supabase
-          .from('audits')
-          .insert({
-            analysis_table: result.data.analysisMarkdown,
-            status: 'locked'
-          })
-          .select()
-          .single();
+if (result.success && result.data) {
+// 1. CREATE THE ID: Save the AI results to Supabase
+  // This is the moment the 'auditId' is born.
+  const { data: record, error: dbError } = await supabase
+    .from('audits')
+    .insert({
+      analysis_table: result.data.analysisMarkdown,
+      billed_amount: parseFloat(result.data.totalBilledAmount || "0"),
+      expected_amount: parseFloat(result.data.totalExpectedAmount || "0"),
+      //has_overcharge: result.hasOvercharge,
+      //discrepancy_details: result.data.discrepancyDetails || {}
+    })
+    .select('id') // <--- We ask Supabase to give us the new ID back
+    .single();
 
-        // 2. If save was successful, update the ID state
-        if (data) {
-          setCurrentAuditId(data.id); // This fixes the 'null' in your logs
-        }
+  if (dbError) {
+    console.error("Database save failed:", dbError);
+    return;
+  }
 
-        // 3. KEEP THIS: This is your original 'else' logic that renders the UI
-        setAnalysisResult({
-          markdown: result.data.analysisMarkdown,
-          discrepancy: result.data.discrepancyDetails || null,
-          logicTrace: (result.data as any).logicTrace || []
-        });
-      } else {
+  // 2. USE THE ID: Now 'record.id' is a real UUID string
+  const actualId = record.id;
+  console.log("NEW AUDIT ID CREATED:", actualId);
+
+  // 3. Update the URL and state so 'Unlock' works
+  router.push(`/audit/${actualId}`, { scroll: false });
+  setCurrentAuditId(actualId);
+
+  // 2. Map the AI data (strings) to your state (numbers)
+  setAnalysisResult({
+    markdown: result.data.analysisMarkdown || '',
+    totalBilled: parseFloat(result.data.totalBilledAmount || "0"),
+    totalExpected: parseFloat(result.data.totalExpectedAmount || "0"),
+    // 3. Use the exact property name from your hover box
+    discrepancyDetails: result.data.discrepancyDetails || {}
+  });
+} else {
             setError((result as any).error || "An error occurred");
           }
       } catch (e: any) {
@@ -231,10 +266,70 @@ const uploadBill = async (dataUrl: string): Promise<string> => {
       insuranceFileInputRef.current.value = '';
     }
   }
+
+const calculateTotalsFromTable = (markdown: string) => {
+  // 1. Get every line that actually has a pipe | and a dollar sign $
+  const lines = markdown.split('\n').filter(line => line.includes('|') && line.includes('$'));
   
-  const openTestModal = () => {
-    setShowReceptionistView(true);
+  let totalBilled = 0;
+  let totalSavings = 0;
+
+  console.log("--- 🕵️ FINAL VERIFICATION ---");
+
+  lines.forEach((line, index) => {
+    // Find all dollar amounts in this line
+    const matches = line.match(/\$\d+(?:\.\d{2})?/g) || [];
+    const numbers = matches.map(m => parseFloat(m.replace('$', '')));
+
+    if (numbers.length > 0) {
+      // BILLED: The highest number in the row is the charge
+      const rowMax = Math.max(...numbers);
+      totalBilled += rowMax;
+
+      // SAVINGS: We specifically target the 'Savings' column by looking at the 
+      // last number in the row if there are multiple numbers.
+      const rowSavings = numbers.length > 1 ? numbers[numbers.length - 1] : 0;
+      totalSavings += rowSavings;
+
+      console.log(`Row ${index + 1} Identified: Charge $${rowMax}, Saving $${rowSavings}`);
+    }
+  });
+
+  console.log("FINAL SUM - Billed:", totalBilled, "Expected:", totalBilled - totalSavings);
+
+  return {
+    billed: totalBilled.toFixed(2),
+    expected: (totalBilled - totalSavings).toFixed(2)
+  };
+};
+
+const handleUnlock = async () => {
+  if (!analysisResult || !currentAuditId) { // Ensure we have both!
+    console.error("Missing audit data or ID");
+    return;
   }
+
+  try {
+    const response = await fetch('/api/checkout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        billedAmount: analysisResult.totalBilled,
+        expectedAmount: analysisResult.totalExpected,
+        // ADD THIS: Pass the ID so the success URL can use it
+        auditId: currentAuditId,
+        analysisMarkdown: analysisResult.markdown
+      }),
+    });
+
+    const session = await response.json();
+    if (session.url) {
+      window.location.href = session.url;
+    }
+  } catch (error) {
+    console.error("Stripe Checkout Error:", error);
+  }
+};
 
   const canAudit = (billText.trim().length > 0 || imageData !== null) && !isPending;
   
@@ -383,7 +478,7 @@ const renderAnalysis = (analysisResult: any) => {
                       <Download className="mr-2 h-4 w-4" />
                       Save to PDF
                     </Button>
-                    <Button type="button" size="lg" variant="outline" onClick={openTestModal} disabled={isPending} className="opacity-100 cursor-pointer hover:bg-slate-900 hover:text-white transition-all duration-200 !visible">
+                    <Button type="button" size="lg" variant="outline" onClick={handleUnlock} disabled={isPending} className="opacity-100 cursor-pointer hover:bg-slate-900 hover:text-white transition-all duration-200 !visible">
                     <Lightbulb className="mr-2 h-4 w-4" />
                       Unlock Advocacy Card ($3.99/mon)
                     </Button>
@@ -448,7 +543,7 @@ const renderAnalysis = (analysisResult: any) => {
             onClose={() => setShowReceptionistView(false)}
             // STOP using 'auditId' (from URL) and START using 'currentAuditId' (from State)
             auditId={currentAuditId ?? undefined} 
-            details={analysisResult?.discrepancy || sampleDiscrepancyForTesting}
+            details={analysisResult?.discrepancyDetails || sampleDiscrepancyForTesting}
             analysisTable={analysisResult?.markdown || ''}
             onLoginAttempt={() => {}}
         />
