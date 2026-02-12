@@ -11,7 +11,6 @@ export async function POST(req: Request) {
 
   let event;
 
-
   try {
     event = stripe.webhooks.constructEvent(
       body,
@@ -19,40 +18,29 @@ export async function POST(req: Request) {
       process.env.STRIPE_WEBHOOK_SECRET!
     );
   } catch (error: any) {
-    console.error(`Webhook signature verification failed: ${error.message}`);
     return new NextResponse(`Webhook Error: ${error.message}`, { status: 400 });
   }
 
-if (event.type === "checkout.session.completed") {
-
+  if (event.type === "checkout.session.completed") {
     const session = event.data.object as any;
     const metadata = session.metadata;
-    console.log("CHECKING SUITCASE:", metadata);
-    console.log("🔍 THE SUITCASE CHECK:");
-    console.log("Is metadata empty?", !metadata || Object.keys(metadata).length === 0);
-    console.log("Total Amount found:", metadata?.totalAmount);
-    console.log("Suggested Amount found:", metadata?.suggestedAmount);
 
-    // 1. Unpack exactly what we sent from the checkout route
     const auditId = metadata?.auditId;
     const userId = metadata?.userId;
-    const totalAmount = metadata?.totalAmount;       // The $1250
-    const suggestedAmount = metadata?.suggestedAmount; // The Suggested Number
-    const analysisData = metadata?.analysisData;     // The Table
 
     if (auditId) {
-      console.log(`Unlocking Audit: ${auditId} | Billed: ${totalAmount}`);
-
       const { error } = await supabase
         .from('audits')
         .update({ 
           status: 'paid', 
           is_unlocked: true,
-          billed_amount: metadata?.totalAmount,      // Matches checkout
-          expected_amount: metadata?.suggestedAmount, // Matches checkout
-          analysis_table: metadata?.analysisData,    // Matches checkout
+          billed_amount: metadata?.totalAmount,      
+          expected_amount: metadata?.suggestedAmount, 
+          analysis_table: metadata?.analysisData,    
           user_id: userId,
-          patient_name: session.customer_details?.name || 'Valued Patient'
+          // FIX: Use the AI-extracted patient name and reasoning from metadata
+          patient_name: metadata?.patientName || session.customer_details?.name || '',
+          reasoning: metadata?.reasoning || 'Medical billing discrepancy detected.'
         })
         .eq('id', auditId);
 
@@ -62,5 +50,3 @@ if (event.type === "checkout.session.completed") {
 
   return new NextResponse("Success", { status: 200 });
 }
-
-

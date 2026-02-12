@@ -12,7 +12,7 @@ export async function POST(req: Request) {
   try {
     // 1. EXTRACT ALL DATA (Not just auditId)
   //  const { auditId, totalAmount, suggestedAmount, analysisData } = await req.json();
-    const { auditId, billedAmount, expectedAmount, analysisMarkdown } = await req.json();
+    const { auditId, billedAmount, expectedAmount, analysisMarkdown, patientName, reasoning } = await req.json();
 
     const cookieStore = await cookies();
     const supabase = createServerClient(
@@ -47,6 +47,8 @@ export async function POST(req: Request) {
         totalAmount: String(billedAmount || "0.00"),      
         suggestedAmount: String(expectedAmount || "0.00"), 
         analysisData: String(analysisMarkdown || "").substring(0, 450), // Stripe limit is 500 chars
+        patientName: "",
+        reasoning: String(reasoning || "Discrepancy detected")
       },
       success_url: `${process.env.NEXT_PUBLIC_SITE_URL}/audit/${auditId}?success=true`,
       cancel_url: `${process.env.NEXT_PUBLIC_SITE_URL}/audit/${auditId}?canceled=true`,
