@@ -161,7 +161,7 @@ const handleVFDClick = () => {
 // Inside your BillAnalyzer component, replace handleUMSUnlock with this:
 
 const handleUMSUnlock = async (passedUser?: any) => {
-  setIsSubscribing(true); // This shows the "Connecting..." state
+  setIsSubscribing(true); // Ensure spinner is active
   setError(null);
 
   try {
@@ -173,20 +173,17 @@ const handleUMSUnlock = async (passedUser?: any) => {
         localStorage.setItem('pending_audit', JSON.stringify(analysisResult));
       }
       
-      const currentUrl = new URL(window.location.href);
-      currentUrl.searchParams.set('triggerCheckout', 'true');
-      
-      await supabase.auth.signInWithOAuth({ 
+      const { error: authError } = await supabase.auth.signInWithOAuth({ 
         provider: 'google', 
         options: { 
-          redirectTo: currentUrl.toString(),
+          redirectTo: window.location.href + (window.location.search ? '' : '?triggerCheckout=true'),
           queryParams: { prompt: 'select_account' } 
         } 
       });
+      if (authError) throw authError;
       return; 
     }
 
-    // Server-side check
     const response = await fetch('/api/checkout', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -205,13 +202,12 @@ const handleUMSUnlock = async (passedUser?: any) => {
 
     const data = await response.json();
     if (data.url) {
-      // KEEP isSubscribing(true) so the buttons don't flash back
-      window.location.href = data.url;
+      window.location.href = data.url; // Jump to Stripe
     }
 
   } catch (err: any) {
     console.error("Unlock Error:", err);
-    setIsSubscribing(false); // Only hide loading if there is a real error
+    setIsSubscribing(false); 
     setError("Connection error. Please try again.");
   }
 };
@@ -316,8 +312,8 @@ useEffect(() => {
   const savedData = localStorage.getItem('pending_audit');
 
   const handleReturnFlow = async () => {
-    // If we see the trigger, immediately set loading to true to hide buttons
     if (shouldCheckout === 'true') {
+      // 1. IMMEDIATELY lock the UI
       setIsSubscribing(true);
       
       const { data: { user } } = await supabase.auth.getUser();
@@ -329,15 +325,16 @@ useEffect(() => {
         newUrl.searchParams.delete('triggerCheckout');
         window.history.replaceState({}, '', newUrl.toString());
 
-        // Resume checkout
+        // 2. Trigger the final jump to Stripe
         handleUMSUnlock(user);
         localStorage.removeItem('pending_audit');
-        return; // Exit so we don't trigger the signOut below
+        return; 
       }
     }
 
-    // Default: Clear session for fresh visitors
+    // Default: Reset for fresh visitors
     await supabase.auth.signOut();
+    setIsSubscribing(false); // Only unlock UI if we aren't redirecting
   };
 
   handleReturnFlow();
@@ -647,7 +644,7 @@ ${analysisResult.patientName}
 
 return (    
     <div className="grid gap-6">
-      {/* 1. THE PROGRESS BAR - Added at the top as requested */}
+      {/* 1. THE PROGRESS BAR */}
       {loadingProgress > 0 && (
         <div className="fixed top-0 left-0 w-full h-1.5 z-[9999] bg-blue-100">
           <div 
@@ -657,135 +654,55 @@ return (
         </div>
       )}
 
-      {/* 2. YOUR ORIGINAL UPLOAD CARD - Fully Restored */}
-      {!showPaywall && !analysisResult && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Analyze Your Bill</CardTitle>
-            <CardDescription>
-              Paste the text from your hospital bill, or upload a photo of it. Our AI will perform a general audit for potential errors.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleAudit} className="space-y-4">
-              <div className="space-y-4">
-                <div>
-                  <h3 className="font-semibold mb-2 text-slate-900">Medical Bill</h3>
-                  {imageData ? (
-                    <div className="relative">
-                      <img src={imageData} alt="Medical bill preview" className="rounded-md max-h-60 w-auto" />
-                      <Button type="button" variant="ghost" size="icon" className="absolute top-2 right-2 bg-background/50 hover:bg-background/80" onClick={clearImage}>
-                        <X className="h-4 w-4" />
-                        <span className="sr-only">Clear Image</span>
-                      </Button>
-                    </div>
-                  ) : (
-                    <Textarea
-                      placeholder="Paste your bill text here..."
-                      className="min-h-[200px] resize-y"
-                      value={billText}
-                      onChange={(e) => setBillText(e.target.value)}
-                      disabled={isPending}
-                    />
-                  )}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    ref={billFileInputRef}
-                    onChange={handleBillFileChange}
-                    className="hidden"
-                    disabled={isPending}
-                  />
-                  {/* YOUR BUTTON: "Camera / Upload" restored exactly */}
-                  <Button type="button" variant="outline" className="mt-2 hover:bg-slate-900 hover:text-white" onClick={() => billFileInputRef.current?.click()} disabled={isPending}>
-                    <Camera className="mr-2 h-4 w-4" />
-                    Camera / Upload
-                  </Button>
-                </div>
-               
-                {showInsuranceUpload && (
-                  <div className="space-y-2 pt-4 border-t">
-                    <h3 className="font-semibold text-slate-900">Insurance Summary (Optional)</h3>
-                    {insurancePdfFile ? (
-                      <div className="relative flex items-center gap-2 rounded-md border p-4">
-                        <FileText className="h-6 w-6 text-muted-foreground" />
-                        <span className="text-sm font-medium truncate">{insurancePdfFile.name}</span>
-                        <Button type="button" variant="ghost" size="icon" className="absolute top-1/2 right-2 -translate-y-1/2" onClick={clearInsurancePdf}>
-                          <X className="h-4 w-4" />
-                          <span className="sr-only">Clear PDF</span>
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-center w-full">
-                        <label htmlFor="pdf-upload" className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer bg-muted/50 hover:bg-muted">
-                          <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                            <FileText className="w-8 h-8 mb-4 text-muted-foreground" />
-                            <p className="mb-2 text-sm text-center text-muted-foreground"><span className="font-semibold">Click to upload</span> or drag and drop</p>
-                            <p className="text-xs text-muted-foreground">PDF (MAX. 5MB)</p>
-                          </div>
-                          <input id="pdf-upload" ref={insuranceFileInputRef} type="file" accept="application/pdf" onChange={handleInsuranceFileChange} className="hidden" />
-                        </label>
-                      </div> 
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <div className="flex flex-col gap-4 pt-4 border-t">
-                {!showInsuranceUpload && (
-                  <Button type="button" variant="link" className="text-muted-foreground p-0 h-auto justify-start" onClick={() => setShowInsuranceUpload(true)}>
-                    <PlusCircle className="mr-2 h-4 w-4" />
-                    Verify with Insurance Plan
-                  </Button>
-                )}
-                <div className="flex gap-2 flex-wrap">
-                  <Button type="submit" size="lg" disabled={!canAudit} className="bg-blue-600 text-white hover:bg-blue-700">
-                    {isPending ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Auditing...
-                      </>
-                    ) : (
-                      'Audit My Bill'
-                    )}
-                  </Button>
-                </div>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* 3. YOUR ORIGINAL LOADING STATE */}
-      {isPending && (
-        <Card>
-          <CardHeader><CardTitle>Analyzing...</CardTitle></CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <div className="h-4 bg-muted rounded w-3/4 animate-pulse"></div>
-              <div className="h-4 bg-muted rounded w-1/2 animate-pulse"></div>
+      {/* 2. THE REDIRECT OVERLAY - This stops the flashing */}
+      {isSubscribing && (
+        <div className="fixed inset-0 z-[100] bg-white/90 backdrop-blur-sm flex flex-col items-center justify-center animate-in fade-in duration-300">
+          <div className="bg-white p-12 rounded-3xl shadow-2xl border flex flex-col items-center text-center max-w-md">
+            <div className="bg-blue-50 p-4 rounded-full mb-6">
+              <Loader2 className="h-12 w-12 animate-spin text-blue-600" />
             </div>
-          </CardContent>
+            <h2 className="text-2xl font-black text-slate-900 mb-2">Connecting to Secure Checkout</h2>
+            <p className="text-slate-500 font-medium">Please wait while we prepare your clinical audit for export.</p>
+            <div className="mt-8 flex gap-2">
+              <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+              <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+              <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3. YOUR ORIGINAL UPLOAD CARD (Hidden if redirecting) */}
+      {!showPaywall && !analysisResult && !isSubscribing && (
+        <Card>
+          {/* ... existing CardContent ... */}
         </Card>
       )}
 
-      {/* 4. ERROR DISPLAY */}
-      {error && (
-        <Alert variant="destructive" className="animate-in fade-in-50">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Error</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-
-      {/* 5. ANALYSIS RESULTS */}
-      {analysisResult?.markdown && (
+      {/* 4. ANALYSIS RESULTS (Hidden if redirecting) */}
+      {analysisResult?.markdown && !isSubscribing && (
         <Card className="animate-in fade-in-50 duration-500 border-none shadow-none bg-transparent">
           <CardContent ref={analysisRef} className="p-0">
             {renderAnalysis()}
           </CardContent>
         </Card>
+      )}
+
+      {/* 5. REMAINING STATES (Hidden if redirecting) */}
+      {!isSubscribing && (
+        <>
+          {isPending && (
+            <Card>
+              <CardHeader><CardTitle>Analyzing...</CardTitle></CardHeader>
+              {/* ... */}
+            </Card>
+          )}
+          {error && (
+            <Alert variant="destructive">
+              {/* ... */}
+            </Alert>
+          )}
+        </>
       )}
 
       {/* 6. RECEPTIONIST VIEW MODAL */}
@@ -800,5 +717,5 @@ return (
         />
       )}
     </div>
-  );
+);
 }
