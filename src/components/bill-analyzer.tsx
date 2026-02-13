@@ -161,15 +161,13 @@ const handleVFDClick = () => {
 // Inside your BillAnalyzer component, replace handleUMSUnlock with this:
 
 const handleUMSUnlock = async (passedUser?: any) => {
-  setIsSubscribing(true);
+  setIsSubscribing(true); // This shows the "Connecting..." state
   setError(null);
 
   try {
-    // 1. Get the current user
     const { data: { user } } = await supabase.auth.getUser();
     const activeUser = passedUser || user;
 
-    // 2. If NO user exists, go to Google
     if (!activeUser) {
       if (analysisResult) {
         localStorage.setItem('pending_audit', JSON.stringify(analysisResult));
@@ -188,7 +186,7 @@ const handleUMSUnlock = async (passedUser?: any) => {
       return; 
     }
 
-    // 3. Attempt the Stripe call
+    // Server-side check
     const response = await fetch('/api/checkout', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -199,22 +197,21 @@ const handleUMSUnlock = async (passedUser?: any) => {
       }),
     });
 
-    // 4. THE FIX: If the server says 401, FORCE a logout and restart login
     if (response.status === 401) {
-      console.log("401 detected. Wiping ghost session...");
       await supabase.auth.signOut();
-      
-      // Instead of showing an error, we immediately trigger the login again
       handleUMSUnlock(); 
       return;
     }
 
     const data = await response.json();
-    if (data.url) window.location.href = data.url;
+    if (data.url) {
+      // KEEP isSubscribing(true) so the buttons don't flash back
+      window.location.href = data.url;
+    }
 
   } catch (err: any) {
     console.error("Unlock Error:", err);
-    setIsSubscribing(false);
+    setIsSubscribing(false); // Only hide loading if there is a real error
     setError("Connection error. Please try again.");
   }
 };
@@ -318,30 +315,34 @@ useEffect(() => {
   const shouldCheckout = params.get('triggerCheckout');
   const savedData = localStorage.getItem('pending_audit');
 
-  const cleanStart = async () => {
-    // If NOT returning from Google, clear any existing local sessions
-    if (shouldCheckout !== 'true') {
-      await supabase.auth.signOut();
-      return;
-    }
-
-    // If returning, resume the flow
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user && savedData) {
-      const data = JSON.parse(savedData);
-      setAnalysisResult(data);
+  const handleReturnFlow = async () => {
+    // If we see the trigger, immediately set loading to true to hide buttons
+    if (shouldCheckout === 'true') {
+      setIsSubscribing(true);
       
-      const newUrl = new URL(window.location.href);
-      newUrl.searchParams.delete('triggerCheckout');
-      window.history.replaceState({}, '', newUrl.toString());
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user && savedData) {
+        const data = JSON.parse(savedData);
+        setAnalysisResult(data);
+        
+        const newUrl = new URL(window.location.href);
+        newUrl.searchParams.delete('triggerCheckout');
+        window.history.replaceState({}, '', newUrl.toString());
 
-      handleUMSUnlock(user);
-      localStorage.removeItem('pending_audit');
+        // Resume checkout
+        handleUMSUnlock(user);
+        localStorage.removeItem('pending_audit');
+        return; // Exit so we don't trigger the signOut below
+      }
     }
+
+    // Default: Clear session for fresh visitors
+    await supabase.auth.signOut();
   };
 
-  cleanStart();
+  handleReturnFlow();
 }, [initialData]);
+
 const uploadBill = async (dataUrl: string): Promise<string> => {
   return dataUrl; 
 };
