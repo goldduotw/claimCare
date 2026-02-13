@@ -142,22 +142,20 @@ useEffect(() => {
 }, [initialData]);
 
 const handleVFDClick = () => {
-  console.log("VFD Clicked - Transitioning to Checkout");
-  
-  // 1. This immediately hides the report (showing the screen in your screenshot)
-  setIsSubscribing(true);
-
-  if (!isUnlocked) {
-    console.log("Status: Locked - Redirecting to Stripe...");
-    // 2. CRITICAL: We must call the unlock function here to move off this screen
-    handleUMSUnlock();
-  } else {
-    // If already paid, show the modal and bring the report back
-    setShowReceptionistView(true);
-    setIsTransitioning(false);
-    setIsSubscribing(false); 
-  }
-};
+    console.log("VFD Clicked - EXECUTION START");
+    
+    // We remove the 700ms timeout entirely. 
+    // We remove setIsTransitioning(true) to prevent the UI from "hiding".
+    if (!isUnlocked) {
+      console.log("Status: Locked - TRIGGERING PAYWALL NOW");
+      setShowPaywall(true); 
+      setIsTransitioning(false); // Force this to false to ensure visibility
+    } else {
+      console.log("Status: Unlocked - TRIGGERING RECEPTIONIST NOW");
+      setShowReceptionistView(true);
+      setIsTransitioning(false);
+    }
+  };
 
 // Feature 3: Deferred Write - Hits Supabase ONLY on Unlock
 // Inside your BillAnalyzer component, replace handleUMSUnlock with this:
@@ -645,118 +643,138 @@ ${analysisResult.patientName}
 
 return (    
     <div className="grid gap-6">
-      {/* STAGE 1: THE REDIRECT/PROCESSING CURTAIN 
-        Triggered when "Verify with Front Desk" is clicked.
-        RULE: Once this is active, the rest of the app is destroyed to prevent flashes.
+      {/* 1. UPLOAD CARD (Home Page)
+          Visible only if we don't have results and aren't currently auditing.
       */}
-      {isSubscribing ? (
-        <div className="flex flex-col items-center justify-center min-h-[400px] border-2 border-dashed rounded-3xl bg-slate-50/50 animate-in fade-in">
-          <Loader2 className="h-10 w-10 animate-spin text-blue-600 mb-4" />
-          <h2 className="text-xl font-bold text-slate-900">Preparing Your Verification...</h2>
-          <p className="text-slate-500">Connecting to secure billing portal.</p>
-        </div>
-      ) : (
-        <>
-          {/* STAGE 2: THE HOME PAGE (Upload Card)
-            RULE: If we have results OR are currently auditing, this page is GONE.
-          */}
-          {!analysisResult && !isPending && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Analyze Your Bill</CardTitle>
-                <CardDescription>
-                  Paste the text from your hospital bill, or upload a photo of it.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleAudit} className="space-y-4">
-                  <div className="space-y-4">
-                    <div>
-                      <h3 className="font-semibold mb-2 text-slate-900">Medical Bill</h3>
-                      {imageData ? (
-                        <div className="relative">
-                          <img src={imageData} alt="Medical bill preview" className="rounded-md max-h-60 w-auto" />
-                          <Button type="button" variant="ghost" size="icon" className="absolute top-2 right-2 bg-background/50 hover:bg-background/80" onClick={clearImage}>
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      ) : (
-                        <Textarea
-                          placeholder="Paste your bill text here..."
-                          className="min-h-[200px] resize-y"
-                          value={billText}
-                          onChange={(e) => setBillText(e.target.value)}
-                          disabled={isPending}
-                        />
-                      )}
-                      <input
-                        type="file"
-                        accept="image/*"
-                        capture="environment"
-                        ref={billFileInputRef}
-                        onChange={handleBillFileChange}
-                        className="hidden"
-                        disabled={isPending}
-                      />
-                      <Button type="button" variant="outline" className="mt-2 hover:bg-slate-900 hover:text-white" onClick={() => billFileInputRef.current?.click()} disabled={isPending}>
-                        <Camera className="mr-2 h-4 w-4" />
-                        Camera / Upload
+      {!analysisResult && !isPending && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Analyze Your Bill</CardTitle>
+            <CardDescription>
+              Paste the text from your hospital bill, or upload a photo of it. Our AI will perform a general audit for potential errors.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleAudit} className="space-y-4">
+              <div className="space-y-4">
+                <div>
+                  <h3 className="font-semibold mb-2 text-slate-900">Medical Bill</h3>
+                  {imageData ? (
+                    <div className="relative">
+                      <img src={imageData} alt="Medical bill preview" className="rounded-md max-h-60 w-auto" />
+                      <Button type="button" variant="ghost" size="icon" className="absolute top-2 right-2 bg-background/50 hover:bg-background/80" onClick={clearImage}>
+                        <X className="h-4 w-4" />
                       </Button>
                     </div>
+                  ) : (
+                    <Textarea
+                      placeholder="Paste your bill text here..."
+                      className="min-h-[200px] resize-y"
+                      value={billText}
+                      onChange={(e) => setBillText(e.target.value)}
+                      disabled={isPending}
+                    />
+                  )}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    ref={billFileInputRef}
+                    onChange={handleBillFileChange}
+                    className="hidden"
+                    disabled={isPending}
+                  />
+                  <Button type="button" variant="outline" className="mt-2 hover:bg-slate-900 hover:text-white" onClick={() => billFileInputRef.current?.click()} disabled={isPending}>
+                    <Camera className="mr-2 h-4 w-4" />
+                    Camera / Upload
+                  </Button>
+                </div>
+               
+                {showInsuranceUpload && (
+                  <div className="space-y-2 pt-4 border-t">
+                    <h3 className="font-semibold text-slate-900">Insurance Summary (Optional)</h3>
+                    {insurancePdfFile ? (
+                      <div className="relative flex items-center gap-2 rounded-md border p-4">
+                        <FileText className="h-6 w-6 text-muted-foreground" />
+                        <span className="text-sm font-medium truncate">{insurancePdfFile.name}</span>
+                        <Button type="button" variant="ghost" size="icon" className="absolute top-1/2 right-2 -translate-y-1/2" onClick={clearInsurancePdf}>
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-center w-full">
+                        <label htmlFor="pdf-upload" className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer bg-muted/50 hover:bg-muted">
+                          <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                            <FileText className="w-8 h-8 mb-4 text-muted-foreground" />
+                            <p className="mb-2 text-sm text-center text-muted-foreground"><span className="font-semibold">Click to upload</span> or drag and drop</p>
+                          </div>
+                          <input id="pdf-upload" ref={insuranceFileInputRef} type="file" accept="application/pdf" onChange={handleInsuranceFileChange} className="hidden" />
+                        </label>
+                      </div> 
+                    )}
                   </div>
+                )}
+              </div>
 
-                  <div className="flex flex-col gap-4 pt-4 border-t">
-                    <div className="flex gap-2 flex-wrap">
-                      <Button type="submit" size="lg" disabled={!canAudit} className="bg-blue-600 text-white hover:bg-blue-700">
-                        Audit My Bill
-                      </Button>
-                    </div>
-                  </div>
-                </form>
-              </CardContent>
-            </Card>
-          )}
+              <div className="flex flex-col gap-4 pt-4 border-t">
+                {!showInsuranceUpload && (
+                  <Button type="button" variant="link" className="text-muted-foreground p-0 h-auto justify-start" onClick={() => setShowInsuranceUpload(true)}>
+                    <PlusCircle className="mr-2 h-4 w-4" />
+                    Verify with Insurance Plan
+                  </Button>
+                )}
+                <div className="flex gap-2 flex-wrap">
+                  <Button type="submit" size="lg" disabled={!canAudit} className="bg-blue-600 text-white hover:bg-blue-700">
+                    Audit My Bill
+                  </Button>
+                </div>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      )}
 
-          {/* STAGE 3: THE REPORT (Analysis Results)
-            RULE: This shows ONLY if results exist and we aren't currently redirecting.
-          */}
-          {isPending && !analysisResult && (
-            <Card>
-              <CardHeader><CardTitle>Analyzing...</CardTitle></CardHeader>
-              <CardContent className="space-y-4">
-                <div className="h-4 bg-muted rounded w-3/4 animate-pulse"></div>
-                <div className="h-4 bg-muted rounded w-1/2 animate-pulse"></div>
-              </CardContent>
-            </Card>
-          )}
+      {/* 2. ANALYZING STATE (The Pulse Shape) */}
+      {isPending && (
+        <Card>
+          <CardHeader><CardTitle>Analyzing...</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <div className="h-4 bg-muted rounded w-3/4 animate-pulse"></div>
+              <div className="h-4 bg-muted rounded w-1/2 animate-pulse"></div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-          {analysisResult?.markdown && (
-            <Card className="border-none shadow-none bg-transparent animate-in fade-in duration-500">
-              <CardContent ref={analysisRef} className="p-0">
-                {renderAnalysis()}
-              </CardContent>
-            </Card>
-          )}
+      {/* 3. ERROR DISPLAY */}
+      {error && (
+        <Alert variant="destructive" className="animate-in fade-in-50">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
 
-          {/* MODALS & ERROR MESSAGES */}
-          {error && (
-            <Alert variant="destructive" className="mt-4">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
+      {/* 4. ANALYSIS RESULTS (VFD/Report Screen) */}
+      {analysisResult?.markdown && (
+        <Card className="animate-in fade-in-50 duration-500 border-none shadow-none bg-transparent">
+          <CardContent ref={analysisRef} className="p-0">
+            {renderAnalysis()}
+          </CardContent>
+        </Card>
+      )}
 
-          {showReceptionistView && (
-            <ReceptionistViewModal
-              isOpen={showReceptionistView}
-              onClose={() => setShowReceptionistView(false)}
-              auditId={currentAuditId ?? undefined} 
-              details={analysisResult?.discrepancyDetails || {}}
-              analysisTable={analysisResult?.markdown || ''}
-              onLoginAttempt={() => {}}
-            />
-          )}
-        </>
+      {/* 5. RECEPTIONIST VIEW MODAL */}
+      {showReceptionistView && (
+        <ReceptionistViewModal
+          isOpen={showReceptionistView}
+          onClose={() => setShowReceptionistView(false)}
+          auditId={currentAuditId ?? undefined} 
+          details={analysisResult?.discrepancyDetails || {}}
+          analysisTable={analysisResult?.markdown || ''}
+          onLoginAttempt={() => {}}
+        />
       )}
     </div>
   );
