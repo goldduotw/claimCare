@@ -142,24 +142,22 @@ useEffect(() => {
 }, [initialData]);
 
 const handleVFDClick = () => {
-    console.log("VFD Clicked - EXECUTION START");
-    
-    // RULE: Once clicked, we transition away from the teaser view
-    setIsSubscribing(true); 
+  console.log("VFD Clicked - Transitioning to Checkout");
+  
+  // 1. This immediately hides the report (showing the screen in your screenshot)
+  setIsSubscribing(true);
 
-    if (!isUnlocked) {
-      console.log("Status: Locked - TRIGGERING PAYWALL NOW");
-      setShowPaywall(true); 
-      setIsTransitioning(false); 
-      // This will then trigger your handleUMSUnlock via the checkout button
-    } else {
-      console.log("Status: Unlocked - TRIGGERING RECEPTIONIST NOW");
-      setShowReceptionistView(true);
-      setIsTransitioning(false);
-      // If already unlocked, we open the view back up
-      setIsSubscribing(false); 
-    }
-  };
+  if (!isUnlocked) {
+    console.log("Status: Locked - Redirecting to Stripe...");
+    // 2. CRITICAL: We must call the unlock function here to move off this screen
+    handleUMSUnlock();
+  } else {
+    // If already paid, show the modal and bring the report back
+    setShowReceptionistView(true);
+    setIsTransitioning(false);
+    setIsSubscribing(false); 
+  }
+};
 
 // Feature 3: Deferred Write - Hits Supabase ONLY on Unlock
 // Inside your BillAnalyzer component, replace handleUMSUnlock with this:
@@ -647,9 +645,9 @@ ${analysisResult.patientName}
 
 return (    
     <div className="grid gap-6">
-      {/* STAGE 3: THE SUBSCRIPTION/CHECKOUT LOADER
-          Triggered by clicking the VFD button. 
-          This is the "Point of No Return" that hides the Report Teaser.
+      {/* STAGE 1: THE REDIRECT/PROCESSING CURTAIN 
+        Triggered when "Verify with Front Desk" is clicked.
+        RULE: Once this is active, the rest of the app is destroyed to prevent flashes.
       */}
       {isSubscribing ? (
         <div className="flex flex-col items-center justify-center min-h-[400px] border-2 border-dashed rounded-3xl bg-slate-50/50 animate-in fade-in">
@@ -659,9 +657,8 @@ return (
         </div>
       ) : (
         <>
-          {/* STAGE 1: THE HOME PAGE (Upload Card)
-              RULE: If we have results OR we are currently auditing, 
-              the home page is removed and NEVER shows again.
+          {/* STAGE 2: THE HOME PAGE (Upload Card)
+            RULE: If we have results OR are currently auditing, this page is GONE.
           */}
           {!analysisResult && !isPending && (
             <Card>
@@ -706,31 +703,6 @@ return (
                         Camera / Upload
                       </Button>
                     </div>
-                  
-                    {showInsuranceUpload && (
-                      <div className="space-y-2 pt-4 border-t">
-                        <h3 className="font-semibold text-slate-900">Insurance Summary (Optional)</h3>
-                        {insurancePdfFile ? (
-                          <div className="relative flex items-center gap-2 rounded-md border p-4">
-                            <FileText className="h-6 w-6 text-muted-foreground" />
-                            <span className="text-sm font-medium truncate">{insurancePdfFile.name}</span>
-                            <Button type="button" variant="ghost" size="icon" className="absolute top-1/2 right-2 -translate-y-1/2" onClick={clearInsurancePdf}>
-                              <X className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center justify-center w-full">
-                            <label htmlFor="pdf-upload" className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer bg-muted/50 hover:bg-muted">
-                              <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                                <FileText className="w-8 h-8 mb-4 text-muted-foreground" />
-                                <p className="mb-2 text-sm text-center text-muted-foreground"><span className="font-semibold">Click to upload</span></p>
-                              </div>
-                              <input id="pdf-upload" ref={insuranceFileInputRef} type="file" accept="application/pdf" onChange={handleInsuranceFileChange} className="hidden" />
-                            </label>
-                          </div> 
-                        )}
-                      </div>
-                    )}
                   </div>
 
                   <div className="flex flex-col gap-4 pt-4 border-t">
@@ -745,9 +717,8 @@ return (
             </Card>
           )}
 
-          {/* STAGE 2: THE REPORT (VFD / Unlocked View)
-              This block is only visible when isSubscribing is false. 
-              The moment VFD is clicked, this whole section is "destroyed" visually.
+          {/* STAGE 3: THE REPORT (Analysis Results)
+            RULE: This shows ONLY if results exist and we aren't currently redirecting.
           */}
           {isPending && !analysisResult && (
             <Card>
