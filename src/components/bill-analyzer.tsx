@@ -450,6 +450,19 @@ const canAudit = (billText.trim().length > 0 || imageData !== null) && !isPendin
 const renderAnalysis = () => {
     if (!analysisResult) return null;
 
+    // --- REDIRECT GUARD: Prevents UI "flashing" during checkout jump ---
+    const isRedirecting = isSubscribing && new URLSearchParams(window.location.search).get('triggerCheckout') === 'true';
+    if (isRedirecting) {
+      return (
+        <div className="flex flex-col items-center justify-center p-20 border-2 border-dashed rounded-3xl bg-blue-50/50 animate-pulse">
+          <Loader2 className="h-10 w-10 animate-spin text-blue-600 mb-4" />
+          <h3 className="text-xl font-bold text-blue-900">Connecting to Secure Checkout...</h3>
+          <p className="text-blue-600/70">Please wait while we prepare your clinical audit.</p>
+        </div>
+      );
+    }
+    // ------------------------------------------------------------------
+
     const isUnlockedReport = initialData?.status === 'paid' || isUnlocked;
 
     // FIXED: Full letter copy logic
@@ -544,7 +557,7 @@ ${analysisResult.patientName}
 {showPaywall && (
   <div className="absolute inset-0 z-10 flex items-center justify-center animate-in zoom-in-95 duration-300">
     <Button 
-      onClick={handleUMSUnlock} 
+      onClick={() => handleUMSUnlock()} 
       disabled={isSubscribing}
       className={`${
         isSubscribing ? 'bg-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
@@ -644,7 +657,7 @@ ${analysisResult.patientName}
 
 return (    
     <div className="grid gap-6">
-      {/* 1. THE PROGRESS BAR */}
+      {/* 1. THE PROGRESS BAR - Added at the top as requested */}
       {loadingProgress > 0 && (
         <div className="fixed top-0 left-0 w-full h-1.5 z-[9999] bg-blue-100">
           <div 
@@ -654,24 +667,13 @@ return (
         </div>
       )}
 
-      {/* 2. THE REDIRECT OVERLAY (Only shows when explicitly connecting) */}
-      {isSubscribing && (
-        <div className="fixed inset-0 z-[100] bg-white/90 backdrop-blur-sm flex flex-col items-center justify-center animate-in fade-in duration-300">
-          <div className="bg-white p-12 rounded-3xl shadow-2xl border flex flex-col items-center text-center max-w-md">
-            <Loader2 className="h-12 w-12 animate-spin text-blue-600 mb-6" />
-            <h2 className="text-2xl font-black text-slate-900 mb-2">Connecting to Checkout</h2>
-            <p className="text-slate-500">Please wait while we verify your session...</p>
-          </div>
-        </div>
-      )}
-
-      {/* 3. UPLOAD CARD (Shows ONLY if there's no result and not currently auditing) */}
-      {!analysisResult && !isPending && (
+      {/* 2. YOUR ORIGINAL UPLOAD CARD - Fully Restored */}
+      {!showPaywall && !analysisResult && (
         <Card>
           <CardHeader>
             <CardTitle>Analyze Your Bill</CardTitle>
             <CardDescription>
-              Paste the text from your hospital bill, or upload a photo of it.
+              Paste the text from your hospital bill, or upload a photo of it. Our AI will perform a general audit for potential errors.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -681,45 +683,110 @@ return (
                   <h3 className="font-semibold mb-2 text-slate-900">Medical Bill</h3>
                   {imageData ? (
                     <div className="relative">
-                      <img src={imageData} alt="Preview" className="rounded-md max-h-60 w-auto" />
-                      <Button type="button" variant="ghost" size="icon" className="absolute top-2 right-2" onClick={clearImage}>
+                      <img src={imageData} alt="Medical bill preview" className="rounded-md max-h-60 w-auto" />
+                      <Button type="button" variant="ghost" size="icon" className="absolute top-2 right-2 bg-background/50 hover:bg-background/80" onClick={clearImage}>
                         <X className="h-4 w-4" />
+                        <span className="sr-only">Clear Image</span>
                       </Button>
                     </div>
                   ) : (
                     <Textarea
                       placeholder="Paste your bill text here..."
-                      className="min-h-[200px]"
+                      className="min-h-[200px] resize-y"
                       value={billText}
                       onChange={(e) => setBillText(e.target.value)}
+                      disabled={isPending}
                     />
                   )}
-                  <input type="file" accept="image/*" ref={billFileInputRef} onChange={handleBillFileChange} className="hidden" />
-                  <Button type="button" variant="outline" className="mt-2" onClick={() => billFileInputRef.current?.click()}>
-                    <Camera className="mr-2 h-4 w-4" /> Camera / Upload
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    ref={billFileInputRef}
+                    onChange={handleBillFileChange}
+                    className="hidden"
+                    disabled={isPending}
+                  />
+                  {/* YOUR BUTTON: "Camera / Upload" restored exactly */}
+                  <Button type="button" variant="outline" className="mt-2 hover:bg-slate-900 hover:text-white" onClick={() => billFileInputRef.current?.click()} disabled={isPending}>
+                    <Camera className="mr-2 h-4 w-4" />
+                    Camera / Upload
                   </Button>
                 </div>
+               
+                {showInsuranceUpload && (
+                  <div className="space-y-2 pt-4 border-t">
+                    <h3 className="font-semibold text-slate-900">Insurance Summary (Optional)</h3>
+                    {insurancePdfFile ? (
+                      <div className="relative flex items-center gap-2 rounded-md border p-4">
+                        <FileText className="h-6 w-6 text-muted-foreground" />
+                        <span className="text-sm font-medium truncate">{insurancePdfFile.name}</span>
+                        <Button type="button" variant="ghost" size="icon" className="absolute top-1/2 right-2 -translate-y-1/2" onClick={clearInsurancePdf}>
+                          <X className="h-4 w-4" />
+                          <span className="sr-only">Clear PDF</span>
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-center w-full">
+                        <label htmlFor="pdf-upload" className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer bg-muted/50 hover:bg-muted">
+                          <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                            <FileText className="w-8 h-8 mb-4 text-muted-foreground" />
+                            <p className="mb-2 text-sm text-center text-muted-foreground"><span className="font-semibold">Click to upload</span> or drag and drop</p>
+                            <p className="text-xs text-muted-foreground">PDF (MAX. 5MB)</p>
+                          </div>
+                          <input id="pdf-upload" ref={insuranceFileInputRef} type="file" accept="application/pdf" onChange={handleInsuranceFileChange} className="hidden" />
+                        </label>
+                      </div> 
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="flex flex-col gap-4 pt-4 border-t">
-                <Button type="submit" size="lg" disabled={!canAudit} className="bg-blue-600 text-white">
-                  Audit My Bill
-                </Button>
+                {!showInsuranceUpload && (
+                  <Button type="button" variant="link" className="text-muted-foreground p-0 h-auto justify-start" onClick={() => setShowInsuranceUpload(true)}>
+                    <PlusCircle className="mr-2 h-4 w-4" />
+                    Verify with Insurance Plan
+                  </Button>
+                )}
+                <div className="flex gap-2 flex-wrap">
+                  <Button type="submit" size="lg" disabled={!canAudit} className="bg-blue-600 text-white hover:bg-blue-700">
+                    {isPending ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Auditing...
+                      </>
+                    ) : (
+                      'Audit My Bill'
+                    )}
+                  </Button>
+                </div>
               </div>
             </form>
           </CardContent>
         </Card>
       )}
 
-      {/* 4. AI AUDITING STATE (Original) */}
+      {/* 3. YOUR ORIGINAL LOADING STATE */}
       {isPending && (
         <Card>
           <CardHeader><CardTitle>Analyzing...</CardTitle></CardHeader>
           <CardContent className="space-y-4">
-            <div className="h-4 bg-muted rounded w-3/4 animate-pulse"></div>
-            <div className="h-4 bg-muted rounded w-1/2 animate-pulse"></div>
+            <div className="space-y-2">
+              <div className="h-4 bg-muted rounded w-3/4 animate-pulse"></div>
+              <div className="h-4 bg-muted rounded w-1/2 animate-pulse"></div>
+            </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* 4. ERROR DISPLAY */}
+      {error && (
+        <Alert variant="destructive" className="animate-in fade-in-50">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
 
       {/* 5. ANALYSIS RESULTS */}
@@ -731,7 +798,7 @@ return (
         </Card>
       )}
 
-      {/* 6. MODAL (Keep outside main flow) */}
+      {/* 6. RECEPTIONIST VIEW MODAL */}
       {showReceptionistView && (
         <ReceptionistViewModal
           isOpen={showReceptionistView}
@@ -743,5 +810,5 @@ return (
         />
       )}
     </div>
-);
+  );
 }
