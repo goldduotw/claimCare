@@ -13,7 +13,8 @@ export async function checkRateLimit(): Promise<boolean> {
   try {
     const ip = (await headers()).get("x-forwarded-for") || "127.0.0.1";
     const [min, day] = await Promise.all([minuteLimit.limit(ip), dailyLimit.limit(ip)]);
-    return min.success && day.success;
+   // return min.success && day.success;
+    return true;
   } catch { return true; }
 }
 
