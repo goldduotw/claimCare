@@ -167,7 +167,7 @@ const handleUMSUnlock = async (passedUser?: any) => {
   try {
     const user = passedUser || (await supabase.auth.getUser()).data.user;
 
-    // IF NO USER: Go to Google and STOP EXECUTION here
+    // 1. If no user, trigger Google and EXIT IMMEDIATELY
     if (!user) {
       if (analysisResult) {
         localStorage.setItem('pending_audit', JSON.stringify(analysisResult));
@@ -175,16 +175,15 @@ const handleUMSUnlock = async (passedUser?: any) => {
       const currentUrl = new URL(window.location.href);
       currentUrl.searchParams.set('triggerCheckout', 'true');
       
-      const { error: authError } = await supabase.auth.signInWithOAuth({ 
+      await supabase.auth.signInWithOAuth({ 
         provider: 'google', 
         options: { redirectTo: currentUrl.toString() } 
       });
-
-      if (authError) throw authError;
-      return; // CRITICAL: Stop the function so it doesn't try to fetch /api/checkout
+      
+      return; // <--- THIS IS THE KEY. It stops the "Unauthorized" API call from firing.
     }
 
-    // IF USER EXISTS: Proceed to Stripe
+    // 2. The rest of the code only runs if 'user' exists
     let finalAuditId = initialData?.id || currentAuditId;
 
     if (!finalAuditId && analysisResult) {
@@ -216,17 +215,14 @@ const handleUMSUnlock = async (passedUser?: any) => {
       }),
     });
 
-    const data = await response.json();
-    if (data.url) {
-      window.location.href = data.url;
-    } else {
-      throw new Error(data.error || "Stripe Connection Failed");
+    const session = await response.json();
+    if (session.url) {
+      window.location.href = session.url;
     }
-
   } catch (err: any) {
     console.error("Unlock Error:", err);
     setIsSubscribing(false);
-    setError(err.message || "Connection Error.");
+    setError("Connection Error. Please try again.");
   }
 };
 
@@ -329,27 +325,33 @@ useEffect(() => {
   const shouldCheckout = params.get('triggerCheckout');
   const savedData = localStorage.getItem('pending_audit');
 
-  const processPostLogin = async () => {
-    // Using getSession as it's the most reliable for immediate post-redirects
+  const checkSessionAndPay = async () => {
+    // 1. Get the session directly from Supabase
     const { data: { session } } = await supabase.auth.getSession();
     
+    // 2. If we have a user AND the URL says we were in a checkout flow
     if (session?.user && shouldCheckout === 'true' && savedData) {
-      console.log("Found session and trigger. Starting Auto-Pay...");
+      console.log("Post-login session detected. Resuming flow...");
+      
+      // Parse the data we saved before the redirect
       const data = JSON.parse(savedData);
       setAnalysisResult(data);
       
+      // 3. Clean the URL so refreshing doesn't trigger this again
       const newUrl = new URL(window.location.href);
       newUrl.searchParams.delete('triggerCheckout');
       window.history.replaceState({}, '', newUrl.toString());
 
-      // Pass the confirmed user directly
-      handleUMSUnlock(session.user);
+      // 4. Fire the function and pass the user to skip the "handshake" delay
+      handleUMSUnlock(session.user); 
+      
+      // Clear the temporary storage
       localStorage.removeItem('pending_audit');
     }
   };
 
-  processPostLogin();
-}, [initialData]);
+  checkSessionAndPay();
+}, [initialData]); // Syncs with your existing dependency
 
 const uploadBill = async (dataUrl: string): Promise<string> => {
   return dataUrl; 
