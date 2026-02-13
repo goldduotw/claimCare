@@ -165,11 +165,11 @@ const handleUMSUnlock = async (passedUser?: any) => {
   setError(null);
 
   try {
-    // Check for user (prioritize the one passed back from redirect)
+    // 1. Get the current user
     const { data: { user } } = await supabase.auth.getUser();
     const activeUser = passedUser || user;
 
-    // If no user is confirmed, trigger Google and EXIT
+    // 2. If NO user exists, go to Google
     if (!activeUser) {
       if (analysisResult) {
         localStorage.setItem('pending_audit', JSON.stringify(analysisResult));
@@ -182,17 +182,13 @@ const handleUMSUnlock = async (passedUser?: any) => {
         provider: 'google', 
         options: { 
           redirectTo: currentUrl.toString(),
-          queryParams: { 
-            prompt: 'select_account', // Forces Google to show the account picker
-            access_type: 'offline' 
-          } 
+          queryParams: { prompt: 'select_account' } 
         } 
       });
-
-      return; // Stop execution here to prevent the 401 error
+      return; 
     }
 
-    // Only runs if a user is confirmed
+    // 3. Attempt the Stripe call
     const response = await fetch('/api/checkout', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -203,9 +199,14 @@ const handleUMSUnlock = async (passedUser?: any) => {
       }),
     });
 
+    // 4. THE FIX: If the server says 401, FORCE a logout and restart login
     if (response.status === 401) {
+      console.log("401 detected. Wiping ghost session...");
       await supabase.auth.signOut();
-      throw new Error("Session expired. Please click again to sign in.");
+      
+      // Instead of showing an error, we immediately trigger the login again
+      handleUMSUnlock(); 
+      return;
     }
 
     const data = await response.json();
@@ -214,7 +215,7 @@ const handleUMSUnlock = async (passedUser?: any) => {
   } catch (err: any) {
     console.error("Unlock Error:", err);
     setIsSubscribing(false);
-    setError(err.message || "Connection Error.");
+    setError("Connection error. Please try again.");
   }
 };
 
@@ -317,14 +318,14 @@ useEffect(() => {
   const shouldCheckout = params.get('triggerCheckout');
   const savedData = localStorage.getItem('pending_audit');
 
-  const initAuth = async () => {
-    // If NOT returning from Google for a checkout, clear the local session
+  const cleanStart = async () => {
+    // If NOT returning from Google, clear any existing local sessions
     if (shouldCheckout !== 'true') {
       await supabase.auth.signOut();
       return;
     }
 
-    // If we ARE returning, get the user and resume
+    // If returning, resume the flow
     const { data: { user } } = await supabase.auth.getUser();
     if (user && savedData) {
       const data = JSON.parse(savedData);
@@ -339,9 +340,8 @@ useEffect(() => {
     }
   };
 
-  initAuth();
+  cleanStart();
 }, [initialData]);
-
 const uploadBill = async (dataUrl: string): Promise<string> => {
   return dataUrl; 
 };
