@@ -312,29 +312,29 @@ useEffect(() => {
   const savedData = localStorage.getItem('pending_audit');
 
   const handleReturnFlow = async () => {
-    if (shouldCheckout === 'true') {
-      // 1. IMMEDIATELY lock the UI
+    if (shouldCheckout === 'true' && savedData) {
+      // KEEP isInitialLoading = true. Do not open the curtain.
       setIsSubscribing(true);
       
       const { data: { user } } = await supabase.auth.getUser();
-      if (user && savedData) {
-        const data = JSON.parse(savedData);
-        setAnalysisResult(data);
+      if (user) {
+        setAnalysisResult(JSON.parse(savedData));
         
         const newUrl = new URL(window.location.href);
         newUrl.searchParams.delete('triggerCheckout');
         window.history.replaceState({}, '', newUrl.toString());
 
-        // 2. Trigger the final jump to Stripe
-        handleUMSUnlock(user);
+        await handleUMSUnlock(user);
         localStorage.removeItem('pending_audit');
+        // We return here so we NEVER set isInitialLoading to false.
+        // This keeps the loader up until the browser physically leaves for Stripe.
         return; 
       }
     }
 
-    // Default: Reset for fresh visitors
-    await supabase.auth.signOut();
-    setIsSubscribing(false); // Only unlock UI if we aren't redirecting
+    // If it's just a normal visit (no redirect happening), open the curtain
+    setIsInitialLoading(false);
+    setIsSubscribing(false);
   };
 
   handleReturnFlow();
@@ -644,7 +644,7 @@ ${analysisResult.patientName}
 
 return (    
     <div className="grid gap-6">
-      {/* 1. THE PROGRESS BAR - Always visible */}
+      {/* 1. THE PROGRESS BAR - Always stays at the top */}
       {loadingProgress > 0 && (
         <div className="fixed top-0 left-0 w-full h-1.5 z-[9999] bg-blue-100">
           <div 
@@ -654,18 +654,23 @@ return (
         </div>
       )}
 
-      {/* --- IMPROVED GATE --- */}
-      {/* Stay in "Loading Mode" if the URL flag is present OR if we are currently subscribing */}
-      {(isSubscribing || (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('triggerCheckout') === 'true')) ? (
-        <div className="flex flex-col items-center justify-center min-h-[500px] border-2 border-dashed rounded-3xl bg-blue-50/50">
-          <Loader2 className="h-10 w-10 animate-spin text-blue-600 mb-4" />
-          <h3 className="text-xl font-bold text-blue-900">Finalizing Your Secure Audit...</h3>
-          <p className="text-blue-600/70">Connecting to the payment portal, please wait.</p>
+      {/* 2. THE MASTER GATE 
+          This blocks everything else if we are:
+          - Initializing (isInitialLoading)
+          - In the middle of a Stripe jump (isSubscribing)
+          - Returning from Google (URL check)
+      */}
+      {isInitialLoading || isSubscribing || (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('triggerCheckout') === 'true') ? (
+        <div className="flex flex-col items-center justify-center min-h-[500px] border-2 border-dashed rounded-3xl bg-slate-50/50 animate-in fade-in duration-300">
+          <Loader2 className="h-12 w-12 animate-spin text-blue-600 mb-4" />
+          <h2 className="text-xl font-bold text-slate-900">Verifying Your Session...</h2>
+          <p className="text-slate-500">Please wait while we prepare your secure audit results.</p>
         </div>
       ) : (
+        /* THE MAIN APP CONTENT - Only visible when NOT loading/redirecting */
         <>
-          {/* 2. UPLOAD CARD */}
-          {!showPaywall && !analysisResult && (
+          {/* 3. UPLOAD CARD (The Home Page) */}
+          {!analysisResult && !isPending && (
             <Card>
               <CardHeader>
                 <CardTitle>Analyze Your Bill</CardTitle>
@@ -763,7 +768,7 @@ return (
             </Card>
           )}
 
-          {/* 3. PENDING STATE */}
+          {/* 4. PENDING AUDIT STATE */}
           {isPending && (
             <Card>
               <CardHeader><CardTitle>Analyzing...</CardTitle></CardHeader>
@@ -776,7 +781,7 @@ return (
             </Card>
           )}
 
-          {/* 4. ERROR DISPLAY */}
+          {/* 5. ERROR DISPLAY */}
           {error && (
             <Alert variant="destructive" className="animate-in fade-in-50">
               <AlertTriangle className="h-4 w-4" />
@@ -785,7 +790,7 @@ return (
             </Alert>
           )}
 
-          {/* 5. ANALYSIS RESULTS */}
+          {/* 6. ANALYSIS RESULTS (The VFD/Report Screen) */}
           {analysisResult?.markdown && (
             <Card className="animate-in fade-in-50 duration-500 border-none shadow-none bg-transparent">
               <CardContent ref={analysisRef} className="p-0">
@@ -794,7 +799,7 @@ return (
             </Card>
           )}
 
-          {/* 6. MODAL */}
+          {/* 7. RECEPTIONIST VIEW MODAL */}
           {showReceptionistView && (
             <ReceptionistViewModal
               isOpen={showReceptionistView}
