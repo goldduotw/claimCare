@@ -168,54 +168,48 @@ const handleVFDClick = () => {
 // Inside your BillAnalyzer component, replace handleUMSUnlock with this:
 
 const handleUMSUnlock = async (passedUser?: any) => {
-  // REMOVED: setIsSubscribing(true) to stop the full-screen blue window
-  setError(null);
+  // 1. CAPTURE: Freeze the data in local variables immediately
+  const auditIdToLock = currentAuditId;
+  const resultToLock = analysisResult;
+
+  // 2. BROWSER DEBUG: Verify what is leaving your computer
+  console.log("PRE-CHECKOUT CAPTURE:", {
+    id: auditIdToLock,
+    patient: resultToLock?.patientName
+  });
+
+  if (!auditIdToLock || auditIdToLock === 'null') {
+    console.error("STOPPING: auditId is missing from state.");
+    setError("Could not link this payment to your audit. Please try again.");
+    return;
+  }
+
+  setIsSubscribing(true);
 
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    const activeUser = passedUser || user;
-
-    if (!activeUser) {
-      if (analysisResult) {
-        localStorage.setItem('pending_audit', JSON.stringify(analysisResult));
-      }
-      
-      const { error: authError } = await supabase.auth.signInWithOAuth({ 
-        provider: 'google', 
-        options: { 
-          redirectTo: window.location.href + (window.location.search ? '' : '?triggerCheckout=true'),
-          queryParams: { prompt: 'select_account' } 
-        } 
-      });
-      if (authError) throw authError;
-      return; 
-    }
-
     const response = await fetch('/api/checkout', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        auditId: initialData?.id || currentAuditId,
-        billedAmount: analysisResult?.totalBilled,
-        analysisMarkdown: analysisResult?.markdown
+        auditId: auditIdToLock,
+        billedAmount: resultToLock?.totalBilled || 0,
+        expectedAmount: resultToLock?.totalExpected || 0,
+        analysisMarkdown: resultToLock?.markdown || "",
+        patientName: resultToLock?.patientName || "Valued Patient",
+        reasoning: resultToLock?.reasoning || "Discrepancy detected"
       }),
     });
 
-    if (response.status === 401) {
-      await supabase.auth.signOut();
-      handleUMSUnlock(); 
-      return;
-    }
-
     const data = await response.json();
     if (data.url) {
-      window.location.href = data.url; // Jump to Stripe
+      window.location.href = data.url;
+    } else {
+      setIsSubscribing(false);
+      console.error("STRIPE_SESSION_ERROR:", data.error);
     }
-
-  } catch (err: any) {
-    console.error("Unlock Error:", err);
-    setIsSubscribing(false); 
-    setError("Connection error. Please try again.");
+  } catch (err) {
+    setIsSubscribing(false);
+    console.error("VERCEL_COMM_ERROR:", err);
   }
 };
 
