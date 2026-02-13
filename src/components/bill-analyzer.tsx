@@ -165,15 +165,13 @@ const handleUMSUnlock = async (passedUser?: any) => {
   setError(null);
 
   try {
-    // 1. Check for a session manually to be safe
+    // Check for session
     const { data: { session } } = await supabase.auth.getSession();
     const user = passedUser || session?.user;
 
-    // 2. THE SECURITY GATE: If no user, we ONLY log in and then STOP.
+    // GATE 1: AUTHENTICATION
     if (!user) {
-      console.log("No session found. Redirecting to Google Login...");
-      
-      // Save your audit data so it's there when you get back
+      console.log("No session. Saving data and moving to Google...");
       if (analysisResult) {
         localStorage.setItem('pending_audit', JSON.stringify(analysisResult));
       }
@@ -181,41 +179,17 @@ const handleUMSUnlock = async (passedUser?: any) => {
       const currentUrl = new URL(window.location.href);
       currentUrl.searchParams.set('triggerCheckout', 'true');
       
-      // Start the redirect
       await supabase.auth.signInWithOAuth({ 
         provider: 'google', 
         options: { redirectTo: currentUrl.toString() } 
       });
 
-      // CRITICAL: Exit the function here. 
-      // This prevents the code below from ever running while unauthenticated.
-      return; 
+      return; // CRITICAL: Stop here to prevent the 401 Unauthorized error
     }
 
-    // 3. THE CHECKOUT GATE: This code only runs if 'user' is valid.
-    console.log("User verified. Connecting to Stripe...");
-    
+    // GATE 2: CHECKOUT (Only reached if user exists)
+    console.log("Session verified. Calling Stripe API...");
     let finalAuditId = initialData?.id || currentAuditId;
-
-    // Insert the audit into Supabase if it doesn't have an ID yet
-    if (!finalAuditId && analysisResult) {
-      const { data: record, error: dbError } = await supabase
-        .from('audits')
-        .insert([{
-          analysis_table: analysisResult.markdown, 
-          billed_amount: String(analysisResult.totalBilled || "0"), 
-          expected_amount: String(analysisResult.totalExpected || "0"), 
-          reasoning: analysisResult.reasoning,
-          patient_name: analysisResult.patientName || "Valued Patient",
-          status: 'pending',
-          user_id: user.id 
-        }])
-        .select('id').single();
-
-      if (dbError) throw dbError;
-      finalAuditId = record.id;
-      setCurrentAuditId(finalAuditId);
-    }
 
     const response = await fetch('/api/checkout', {
       method: 'POST',
@@ -223,7 +197,8 @@ const handleUMSUnlock = async (passedUser?: any) => {
       body: JSON.stringify({
         auditId: finalAuditId,
         billedAmount: analysisResult?.totalBilled,
-        analysisMarkdown: analysisResult?.markdown
+        analysisMarkdown: analysisResult?.markdown,
+        mode: 'subscription' 
       }),
     });
 
@@ -231,7 +206,7 @@ const handleUMSUnlock = async (passedUser?: any) => {
     if (sessionData.url) {
       window.location.href = sessionData.url;
     } else {
-      throw new Error(sessionData.error || "Stripe session failed");
+      throw new Error(sessionData.error || "Stripe Session Failed");
     }
 
   } catch (err: any) {
@@ -340,35 +315,27 @@ useEffect(() => {
   const shouldCheckout = params.get('triggerCheckout');
   const savedData = localStorage.getItem('pending_audit');
 
-  const checkSessionAndPay = async () => {
-    // 1. Get the session directly from Supabase. 
-    // getSession is preferred for redirects as it reads local state first.
+  const resumeFlow = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     
-    // 2. If we have a user AND the URL has our custom trigger flag
     if (session?.user && shouldCheckout === 'true' && savedData) {
-      console.log("Post-login session detected. Resuming checkout flow...");
-      
-      // 3. Restore the analysis result to the UI state
+      console.log("Returned from Google. Resuming checkout...");
       const data = JSON.parse(savedData);
       setAnalysisResult(data);
       
-      // 4. Clean the URL so a manual refresh doesn't trigger this again
+      // Clean up the URL
       const newUrl = new URL(window.location.href);
       newUrl.searchParams.delete('triggerCheckout');
       window.history.replaceState({}, '', newUrl.toString());
 
-      // 5. Fire the unlock function. 
-      // We pass the session.user directly to skip the "getUser" delay.
-      handleUMSUnlock(session.user); 
-      
-      // 6. Clean up temporary storage
+      // PASS USER OBJECT: This skips the getUser() delay in handleUMSUnlock
+      handleUMSUnlock(session.user);
       localStorage.removeItem('pending_audit');
     }
   };
 
-  checkSessionAndPay();
-}, [initialData]); // Stays synced with your component's initial data load
+  resumeFlow();
+}, [initialData]);
 
 const uploadBill = async (dataUrl: string): Promise<string> => {
   return dataUrl; 
