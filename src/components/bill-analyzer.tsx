@@ -112,7 +112,14 @@ export function BillAnalyzer({ initialData, isUnlocked: externalIsUnlocked }: Bi
   const analysisRef = useRef<HTMLDivElement>(null);
   const billFileInputRef = useRef<HTMLInputElement>(null);
   const insuranceFileInputRef = useRef<HTMLInputElement>(null);
-  const [isSubscribing, setIsSubscribing] = useState(false);
+  //const [isSubscribing, setIsSubscribing] = useState(false);
+  // Change this line to check the URL immediately on load
+const [isSubscribing, setIsSubscribing] = useState(() => {
+  if (typeof window !== 'undefined') {
+    return new URLSearchParams(window.location.search).get('triggerCheckout') === 'true';
+  }
+  return false;
+});
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
 
@@ -313,26 +320,26 @@ useEffect(() => {
 
   const handleReturnFlow = async () => {
     if (shouldCheckout === 'true') {
-      // REMOVED: setIsSubscribing(true) from here
+      // Keep isSubscribing true to prevent Home/VFD flashes
+      setIsSubscribing(true);
       
       const { data: { user } } = await supabase.auth.getUser();
+      
       if (user && savedData) {
         const data = JSON.parse(savedData);
         setAnalysisResult(data);
         
+        // Clean the URL so a refresh doesn't loop
         const newUrl = new URL(window.location.href);
         newUrl.searchParams.delete('triggerCheckout');
         window.history.replaceState({}, '', newUrl.toString());
 
-        // Trigger the jump to Stripe silently in the background
+        // Jump to Stripe immediately
         handleUMSUnlock(user);
-        localStorage.removeItem('pending_audit');
         return; 
       }
     }
-
-    // Default: Reset for fresh visitors
-    await supabase.auth.signOut();
+    // Only turn off the "Curtain" if we aren't in a checkout flow
     setIsSubscribing(false); 
   };
 
@@ -643,138 +650,86 @@ ${analysisResult.patientName}
 
 return (    
     <div className="grid gap-6">
-      {/* 1. UPLOAD CARD (Home Page)
-          Visible only if we don't have results and aren't currently auditing.
+      {/* STAGE 1: THE LOCK
+          If we are subscribing (redirecting), we render ONLY this.
+          The Home Page and VFD are physically absent from the code below.
       */}
-      {!analysisResult && !isPending && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Analyze Your Bill</CardTitle>
-            <CardDescription>
-              Paste the text from your hospital bill, or upload a photo of it. Our AI will perform a general audit for potential errors.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleAudit} className="space-y-4">
-              <div className="space-y-4">
-                <div>
-                  <h3 className="font-semibold mb-2 text-slate-900">Medical Bill</h3>
-                  {imageData ? (
-                    <div className="relative">
-                      <img src={imageData} alt="Medical bill preview" className="rounded-md max-h-60 w-auto" />
-                      <Button type="button" variant="ghost" size="icon" className="absolute top-2 right-2 bg-background/50 hover:bg-background/80" onClick={clearImage}>
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ) : (
-                    <Textarea
-                      placeholder="Paste your bill text here..."
-                      className="min-h-[200px] resize-y"
-                      value={billText}
-                      onChange={(e) => setBillText(e.target.value)}
-                      disabled={isPending}
+      {isSubscribing ? (
+        <Card className="animate-in fade-in duration-300">
+          <CardContent className="flex flex-col items-center justify-center min-h-[400px]">
+            <Loader2 className="h-10 w-10 animate-spin text-blue-600 mb-4" />
+            <h2 className="text-xl font-bold text-slate-900">Resuming Your Audit...</h2>
+            <p className="text-slate-500">Redirecting to secure billing portal.</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          {/* STAGE 2: HOME PAGE
+              Only exists if no results and no pending audit.
+          */}
+          {!analysisResult && !isPending && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Analyze Your Bill</CardTitle>
+                <CardDescription>Upload your bill to begin.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleAudit} className="space-y-4">
+                  {/* Your Bill Text / Camera Inputs */}
+                  <div className="space-y-4">
+                    <Textarea 
+                      placeholder="Paste text here..." 
+                      value={billText} 
+                      onChange={(e) => setBillText(e.target.value)} 
                     />
-                  )}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    ref={billFileInputRef}
-                    onChange={handleBillFileChange}
-                    className="hidden"
-                    disabled={isPending}
-                  />
-                  <Button type="button" variant="outline" className="mt-2 hover:bg-slate-900 hover:text-white" onClick={() => billFileInputRef.current?.click()} disabled={isPending}>
-                    <Camera className="mr-2 h-4 w-4" />
-                    Camera / Upload
-                  </Button>
-                </div>
-               
-                {showInsuranceUpload && (
-                  <div className="space-y-2 pt-4 border-t">
-                    <h3 className="font-semibold text-slate-900">Insurance Summary (Optional)</h3>
-                    {insurancePdfFile ? (
-                      <div className="relative flex items-center gap-2 rounded-md border p-4">
-                        <FileText className="h-6 w-6 text-muted-foreground" />
-                        <span className="text-sm font-medium truncate">{insurancePdfFile.name}</span>
-                        <Button type="button" variant="ghost" size="icon" className="absolute top-1/2 right-2 -translate-y-1/2" onClick={clearInsurancePdf}>
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-center w-full">
-                        <label htmlFor="pdf-upload" className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer bg-muted/50 hover:bg-muted">
-                          <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                            <FileText className="w-8 h-8 mb-4 text-muted-foreground" />
-                            <p className="mb-2 text-sm text-center text-muted-foreground"><span className="font-semibold">Click to upload</span> or drag and drop</p>
-                          </div>
-                          <input id="pdf-upload" ref={insuranceFileInputRef} type="file" accept="application/pdf" onChange={handleInsuranceFileChange} className="hidden" />
-                        </label>
-                      </div> 
-                    )}
+                    <Button type="submit" size="lg" className="bg-blue-600 text-white w-full">
+                      Audit My Bill
+                    </Button>
                   </div>
-                )}
-              </div>
+                </form>
+              </CardContent>
+            </Card>
+          )}
 
-              <div className="flex flex-col gap-4 pt-4 border-t">
-                {!showInsuranceUpload && (
-                  <Button type="button" variant="link" className="text-muted-foreground p-0 h-auto justify-start" onClick={() => setShowInsuranceUpload(true)}>
-                    <PlusCircle className="mr-2 h-4 w-4" />
-                    Verify with Insurance Plan
-                  </Button>
-                )}
-                <div className="flex gap-2 flex-wrap">
-                  <Button type="submit" size="lg" disabled={!canAudit} className="bg-blue-600 text-white hover:bg-blue-700">
-                    Audit My Bill
-                  </Button>
-                </div>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-      )}
+          {/* STAGE 3: THE VFD REPORT
+              Visible only if analysisResult exists.
+          */}
+          {isPending && !analysisResult && (
+            <Card>
+              <CardHeader><CardTitle>Analyzing...</CardTitle></CardHeader>
+              <CardContent className="space-y-4">
+                <div className="h-4 bg-muted rounded w-3/4 animate-pulse"></div>
+                <div className="h-4 bg-muted rounded w-1/2 animate-pulse"></div>
+              </CardContent>
+            </Card>
+          )}
 
-      {/* 2. ANALYZING STATE (The Pulse Shape) */}
-      {isPending && (
-        <Card>
-          <CardHeader><CardTitle>Analyzing...</CardTitle></CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <div className="h-4 bg-muted rounded w-3/4 animate-pulse"></div>
-              <div className="h-4 bg-muted rounded w-1/2 animate-pulse"></div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+          {analysisResult?.markdown && (
+            <Card className="border-none shadow-none bg-transparent">
+              <CardContent ref={analysisRef} className="p-0">
+                {renderAnalysis()}
+              </CardContent>
+            </Card>
+          )}
 
-      {/* 3. ERROR DISPLAY */}
-      {error && (
-        <Alert variant="destructive" className="animate-in fade-in-50">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Error</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
+          {/* MODALS & ERRORS */}
+          {error && (
+            <Alert variant="destructive" className="mt-4">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
 
-      {/* 4. ANALYSIS RESULTS (VFD/Report Screen) */}
-      {analysisResult?.markdown && (
-        <Card className="animate-in fade-in-50 duration-500 border-none shadow-none bg-transparent">
-          <CardContent ref={analysisRef} className="p-0">
-            {renderAnalysis()}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* 5. RECEPTIONIST VIEW MODAL */}
-      {showReceptionistView && (
-        <ReceptionistViewModal
-          isOpen={showReceptionistView}
-          onClose={() => setShowReceptionistView(false)}
-          auditId={currentAuditId ?? undefined} 
-          details={analysisResult?.discrepancyDetails || {}}
-          analysisTable={analysisResult?.markdown || ''}
-          onLoginAttempt={() => {}}
-        />
+          {showReceptionistView && (
+            <ReceptionistViewModal
+              isOpen={showReceptionistView}
+              onClose={() => setShowReceptionistView(false)}
+              auditId={currentAuditId ?? undefined} 
+              details={analysisResult?.discrepancyDetails || {}}
+              analysisTable={analysisResult?.markdown || ''}
+              onLoginAttempt={() => {}}
+            />
+          )}
+        </>
       )}
     </div>
   );
