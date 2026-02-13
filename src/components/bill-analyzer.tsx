@@ -165,27 +165,39 @@ const handleUMSUnlock = async (passedUser?: any) => {
   setError(null);
 
   try {
-    const user = passedUser || (await supabase.auth.getUser()).data.user;
+    // 1. Check for a session manually to be safe
+    const { data: { session } } = await supabase.auth.getSession();
+    const user = passedUser || session?.user;
 
-    // 1. If no user, trigger Google and EXIT IMMEDIATELY
+    // 2. THE SECURITY GATE: If no user, we ONLY log in and then STOP.
     if (!user) {
+      console.log("No session found. Redirecting to Google Login...");
+      
+      // Save your audit data so it's there when you get back
       if (analysisResult) {
         localStorage.setItem('pending_audit', JSON.stringify(analysisResult));
       }
+      
       const currentUrl = new URL(window.location.href);
       currentUrl.searchParams.set('triggerCheckout', 'true');
       
+      // Start the redirect
       await supabase.auth.signInWithOAuth({ 
         provider: 'google', 
         options: { redirectTo: currentUrl.toString() } 
       });
-      
-      return; // <--- THIS IS THE KEY. It stops the "Unauthorized" API call from firing.
+
+      // CRITICAL: Exit the function here. 
+      // This prevents the code below from ever running while unauthenticated.
+      return; 
     }
 
-    // 2. The rest of the code only runs if 'user' exists
+    // 3. THE CHECKOUT GATE: This code only runs if 'user' is valid.
+    console.log("User verified. Connecting to Stripe...");
+    
     let finalAuditId = initialData?.id || currentAuditId;
 
+    // Insert the audit into Supabase if it doesn't have an ID yet
     if (!finalAuditId && analysisResult) {
       const { data: record, error: dbError } = await supabase
         .from('audits')
@@ -215,14 +227,17 @@ const handleUMSUnlock = async (passedUser?: any) => {
       }),
     });
 
-    const session = await response.json();
-    if (session.url) {
-      window.location.href = session.url;
+    const sessionData = await response.json();
+    if (sessionData.url) {
+      window.location.href = sessionData.url;
+    } else {
+      throw new Error(sessionData.error || "Stripe session failed");
     }
+
   } catch (err: any) {
-    console.error("Unlock Error:", err);
+    console.error("Critical Flow Error:", err);
     setIsSubscribing(false);
-    setError("Connection Error. Please try again.");
+    setError(err.message || "Connection Error. Please try again.");
   }
 };
 
@@ -326,32 +341,34 @@ useEffect(() => {
   const savedData = localStorage.getItem('pending_audit');
 
   const checkSessionAndPay = async () => {
-    // 1. Get the session directly from Supabase
+    // 1. Get the session directly from Supabase. 
+    // getSession is preferred for redirects as it reads local state first.
     const { data: { session } } = await supabase.auth.getSession();
     
-    // 2. If we have a user AND the URL says we were in a checkout flow
+    // 2. If we have a user AND the URL has our custom trigger flag
     if (session?.user && shouldCheckout === 'true' && savedData) {
-      console.log("Post-login session detected. Resuming flow...");
+      console.log("Post-login session detected. Resuming checkout flow...");
       
-      // Parse the data we saved before the redirect
+      // 3. Restore the analysis result to the UI state
       const data = JSON.parse(savedData);
       setAnalysisResult(data);
       
-      // 3. Clean the URL so refreshing doesn't trigger this again
+      // 4. Clean the URL so a manual refresh doesn't trigger this again
       const newUrl = new URL(window.location.href);
       newUrl.searchParams.delete('triggerCheckout');
       window.history.replaceState({}, '', newUrl.toString());
 
-      // 4. Fire the function and pass the user to skip the "handshake" delay
+      // 5. Fire the unlock function. 
+      // We pass the session.user directly to skip the "getUser" delay.
       handleUMSUnlock(session.user); 
       
-      // Clear the temporary storage
+      // 6. Clean up temporary storage
       localStorage.removeItem('pending_audit');
     }
   };
 
   checkSessionAndPay();
-}, [initialData]); // Syncs with your existing dependency
+}, [initialData]); // Stays synced with your component's initial data load
 
 const uploadBill = async (dataUrl: string): Promise<string> => {
   return dataUrl; 
