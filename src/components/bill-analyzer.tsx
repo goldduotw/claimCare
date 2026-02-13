@@ -650,18 +650,27 @@ ${analysisResult.patientName}
 
 return (    
   <div className="grid gap-6">
-    {/* STAGE 1: THE REDIRECT LOADER
-        This covers the screen ONLY when redirecting to Stripe/Google.
-        It uses the same 'grid' container to keep layout stability.
+    {/* STAGE 1: THE ACTION PROGRESS BAR
+        This replaces the "Resuming" screen with a clear "Proceeding to Pay" status.
+        Only shows when redirecting to Stripe or returning from Auth.
     */}
     {isSubscribing && (
-      <Card className="animate-in fade-in duration-300">
+      <Card className="animate-in fade-in zoom-in-95 duration-500 border-blue-100 shadow-md">
         <CardContent className="flex flex-col items-center justify-center min-h-[400px] py-12">
-          <Loader2 className="h-12 w-12 animate-spin text-blue-600 mb-6" />
-          <h2 className="text-2xl font-bold text-slate-900">Resuming Your Audit...</h2>
-          <p className="text-slate-500 text-center max-w-sm mt-2">
-            Redirecting to secure billing portal.
+          <div className="w-full max-w-xs bg-slate-100 h-2 rounded-full overflow-hidden mb-6">
+            <div className="bg-blue-600 h-full w-full animate-progress-fast origin-left"></div>
+          </div>
+          <Loader2 className="h-10 w-10 animate-spin text-blue-600 mb-4" />
+          <h2 className="text-2xl font-black text-slate-900 tracking-tight">
+            Proceeding to Secure Payment...
+          </h2>
+          <p className="text-slate-500 text-center max-w-sm mt-2 font-medium">
+            We are preparing your clinical audit for final verification.
           </p>
+          <div className="mt-8 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-400">
+            <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+            Encryption Active
+          </div>
         </CardContent>
       </Card>
     )}
@@ -729,7 +738,7 @@ return (
                       <label htmlFor="pdf-upload" className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer bg-muted/50 hover:bg-muted">
                         <div className="flex flex-col items-center justify-center pt-5 pb-6">
                           <FileText className="w-8 h-8 mb-4 text-muted-foreground" />
-                          <p className="mb-2 text-sm text-center text-muted-foreground"><span className="font-semibold">Click to upload</span> or drag and drop</p>
+                          <p className="mb-2 text-sm text-center text-muted-foreground"><span className="font-semibold">Click to upload</span></p>
                         </div>
                         <input id="pdf-upload" ref={insuranceFileInputRef} type="file" accept="application/pdf" onChange={handleInsuranceFileChange} className="hidden" />
                       </label>
@@ -758,7 +767,7 @@ return (
     )}
 
     {/* STAGE 3: THE ANALYSIS PULSE
-        Visible only during the actual AI processing.
+        Visible only during the initial AI processing.
     */}
     {isPending && !isSubscribing && (
       <Card>
