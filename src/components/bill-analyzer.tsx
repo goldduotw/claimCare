@@ -112,7 +112,10 @@ export function BillAnalyzer({ initialData, isUnlocked: externalIsUnlocked }: Bi
   const analysisRef = useRef<HTMLDivElement>(null);
   const billFileInputRef = useRef<HTMLInputElement>(null);
   const insuranceFileInputRef = useRef<HTMLInputElement>(null);
-  
+  const [isSubscribing, setIsSubscribing] = useState(false);
+  const [loadingProgress, setLoadingProgress] = useState(0);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+
   const { toast } = useToast();
   const searchParams = useSearchParams();
   const [currentAuditId, setCurrentAuditId] = useState<string | null>(null);
@@ -158,29 +161,28 @@ const handleVFDClick = () => {
 // Inside your BillAnalyzer component, replace handleUMSUnlock with this:
 
 const handleUMSUnlock = async () => {
-  const { data: { user } } = await supabase.auth.getUser();
-
-  if (!user) {
-    if (analysisResult) {
-      localStorage.setItem('pending_audit', JSON.stringify(analysisResult));
-    }
-    const currentUrl = new URL(window.location.href);
-    currentUrl.searchParams.set('triggerCheckout', 'true');
-    await supabase.auth.signInWithOAuth({ 
-      provider: 'google', 
-      options: { redirectTo: currentUrl.toString() } 
-    });
-    return;
-  }
-
-  if (!analysisResult) return; 
+  setIsSubscribing(true); // This will grey out the button immediately
+  setError(null);
 
   try {
-    // 1. SILENT SAVE: Create the record in Supabase first to get a valid ID.
-    // We do NOT set setIsPending(true) here, so no "Analyzing..." flicker occurs.
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      if (analysisResult) {
+        localStorage.setItem('pending_audit', JSON.stringify(analysisResult));
+      }
+      const currentUrl = new URL(window.location.href);
+      currentUrl.searchParams.set('triggerCheckout', 'true');
+      await supabase.auth.signInWithOAuth({ 
+        provider: 'google', 
+        options: { redirectTo: currentUrl.toString() } 
+      });
+      return;
+    }
+
     let finalAuditId = initialData?.id || currentAuditId;
 
-    if (!finalAuditId) {
+    if (!finalAuditId && analysisResult) {
       const { data: record, error: dbError } = await supabase
         .from('audits')
         .insert([{
@@ -196,20 +198,19 @@ const handleUMSUnlock = async () => {
 
       if (dbError) throw dbError;
       finalAuditId = record.id;
-      setCurrentAuditId(record.id); // Save it to state just in case
+      setCurrentAuditId(finalAuditId);
     }
 
-    // 2. JUMP TO STRIPE: Now we have a real ID to send to metadata
     const response = await fetch('/api/checkout', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        auditId: finalAuditId, // NO LONGER NULL
-        billedAmount: analysisResult.totalBilled,
-        expectedAmount: analysisResult.totalExpected,
-        reasoning: analysisResult.reasoning,
-        patientName: analysisResult.patientName || "Valued Patient",
-        analysisMarkdown: analysisResult.markdown,
+        auditId: finalAuditId,
+        billedAmount: analysisResult?.totalBilled,
+        expectedAmount: analysisResult?.totalExpected,
+        reasoning: analysisResult?.reasoning,
+        patientName: analysisResult?.patientName || "Valued Patient",
+        analysisMarkdown: analysisResult?.markdown,
         mode: 'subscription' 
       }),
     });
@@ -220,6 +221,7 @@ const handleUMSUnlock = async () => {
     }
   } catch (err: any) {
     console.error("Unlock Error:", err);
+    setIsSubscribing(false); // Bring the button back if it fails
     setError("Connection Error. Please try again.");
   }
 };
@@ -229,6 +231,15 @@ const handleUMSUnlock = async () => {
 const handleAudit = async (event: React.FormEvent<HTMLFormElement>) => {
   event.preventDefault();
   setError(null);
+
+  // --- ADDED PROTECTION SWITCH ---
+  const isAllowed = await checkRateLimit();
+  if (!isAllowed) {
+    setError("Rate limit exceeded. Please wait 15 minutes before trying again.");
+    return;
+  }
+  // -------------------------------
+
   setIsPending(true);
 
   try {
@@ -308,36 +319,35 @@ const fetchAudit = async (id: string) => {
     setShowPaywall(false); // This removes the UMS/VFD buttons
   }
 };
-/*
-useEffect(() => {
-  const idFromUrl = searchParams.get('id');
-  if (idFromUrl) {
-    setCurrentAuditId(idFromUrl);
-    fetchAudit(idFromUrl);
-  }
-}, [searchParams]);
-*/
+
 useEffect(() => {
   const params = new URLSearchParams(window.location.search);
   const shouldCheckout = params.get('triggerCheckout');
   const savedData = localStorage.getItem('pending_audit');
 
+  // FAST-PATH: If we find a session token in storage, stop the loading spinner immediately
+  // This bypasses the 300ms-500ms network delay of the official Supabase handshake.
+  const hasToken = document.cookie.includes('sb-access-token') || 
+                   Object.keys(localStorage).some(key => key.includes('auth-token'));
+  
+  if (hasToken || initialData) {
+    setIsInitialLoading(false);
+  }
+
   if (shouldCheckout === 'true' && savedData) {
     const data = JSON.parse(savedData);
     setAnalysisResult(data);
     
-    // Clean URL immediately to prevent loops
     const newUrl = new URL(window.location.href);
     newUrl.searchParams.delete('triggerCheckout');
     window.history.replaceState({}, '', newUrl.toString());
 
-    // Small delay to let state settle before calling the redirect logic
     setTimeout(() => {
       handleUMSUnlock();
       localStorage.removeItem('pending_audit');
     }, 100);
   }
-}, []);
+}, [initialData]); // Added initialData to dependency for safety
 
 const uploadBill = async (dataUrl: string): Promise<string> => {
   return dataUrl; 
@@ -540,13 +550,26 @@ ${analysisResult.patientName}
                 )}
               </div>
             </Alert>
-            {showPaywall && (
-              <div className="absolute inset-0 z-10 flex items-center justify-center animate-in zoom-in-95 duration-300">
-                <Button onClick={handleUMSUnlock} className="bg-blue-600 hover:bg-blue-700 text-white font-black px-12 py-8 h-auto text-xl shadow-2xl cursor-pointer">
-                  Start Subscription ($3.99/mo)
-                </Button>
-              </div>
-            )}
+{showPaywall && (
+  <div className="absolute inset-0 z-10 flex items-center justify-center animate-in zoom-in-95 duration-300">
+    <Button 
+      onClick={handleUMSUnlock} 
+      disabled={isSubscribing}
+      className={`${
+        isSubscribing ? 'bg-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
+      } text-white font-black px-12 py-8 h-auto text-xl shadow-2xl transition-all`}
+    >
+      {isSubscribing ? (
+        <div className="flex items-center gap-3">
+          <Loader2 className="h-6 w-6 animate-spin" />
+          Connecting...
+        </div>
+      ) : (
+        'Start Subscription ($3.99/mo)'
+      )}
+    </Button>
+  </div>
+)}
           </div>
         ) : (
           /* UNLOCKED VIEW */
@@ -630,9 +653,17 @@ ${analysisResult.patientName}
 
 return (    
     <div className="grid gap-6">
-      {/* FIX: Added "!analysisResult" check. 
-         This hides the upload box if we already have saved data from the database.
-      */}
+      {/* 1. THE PROGRESS BAR - Added at the top as requested */}
+      {loadingProgress > 0 && (
+        <div className="fixed top-0 left-0 w-full h-1.5 z-[9999] bg-blue-100">
+          <div 
+            className="h-full bg-blue-600 shadow-[0_0_10px_rgba(37,99,235,0.5)] transition-all duration-500 ease-out"
+            style={{ width: `${loadingProgress}%` }}
+          />
+        </div>
+      )}
+
+      {/* 2. YOUR ORIGINAL UPLOAD CARD - Fully Restored */}
       {!showPaywall && !analysisResult && (
         <Card>
           <CardHeader>
@@ -672,6 +703,7 @@ return (
                     className="hidden"
                     disabled={isPending}
                   />
+                  {/* YOUR BUTTON: "Camera / Upload" restored exactly */}
                   <Button type="button" variant="outline" className="mt-2 hover:bg-slate-900 hover:text-white" onClick={() => billFileInputRef.current?.click()} disabled={isPending}>
                     <Camera className="mr-2 h-4 w-4" />
                     Camera / Upload
@@ -731,6 +763,7 @@ return (
         </Card>
       )}
 
+      {/* 3. YOUR ORIGINAL LOADING STATE */}
       {isPending && (
         <Card>
           <CardHeader><CardTitle>Analyzing...</CardTitle></CardHeader>
@@ -743,6 +776,7 @@ return (
         </Card>
       )}
 
+      {/* 4. ERROR DISPLAY */}
       {error && (
         <Alert variant="destructive" className="animate-in fade-in-50">
           <AlertTriangle className="h-4 w-4" />
@@ -751,9 +785,7 @@ return (
         </Alert>
       )}
 
-      {/* This section is what renders the "this is a test" reasoning 
-         because it calls the renderAnalysis function below.
-      */}
+      {/* 5. ANALYSIS RESULTS */}
       {analysisResult?.markdown && (
         <Card className="animate-in fade-in-50 duration-500 border-none shadow-none bg-transparent">
           <CardContent ref={analysisRef} className="p-0">
@@ -762,12 +794,13 @@ return (
         </Card>
       )}
 
+      {/* 6. RECEPTIONIST VIEW MODAL */}
       {showReceptionistView && (
         <ReceptionistViewModal
           isOpen={showReceptionistView}
           onClose={() => setShowReceptionistView(false)}
           auditId={currentAuditId ?? undefined} 
-          details={analysisResult?.discrepancyDetails || sampleDiscrepancyForTesting}
+          details={analysisResult?.discrepancyDetails || {}}
           analysisTable={analysisResult?.markdown || ''}
           onLoginAttempt={() => {}}
         />

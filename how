@@ -1,0 +1,53 @@
+[33mcommit a1a72d018fe0ad3b069aaeb959479ba9d444792a[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m
+Author: goldduotw <151952616+goldduotw@users.noreply.github.com>
+Date:   Thu Feb 12 21:51:54 2026 +0000
+
+    before speed fix: ts files
+
+[33mcommit bcd1fcbaef2f58611a2473a552739ef2b51a0e88[m
+Author: goldduotw <151952616+goldduotw@users.noreply.github.com>
+Date:   Thu Feb 12 21:50:29 2026 +0000
+
+    before speed fix - tsx
+
+[33mcommit cd0a48380f702d1faf85f9e3ab451488084a91ab[m
+Author: goldduotw <151952616+goldduotw@users.noreply.github.com>
+Date:   Sat Feb 7 20:23:15 2026 +0000
+
+    solved audit id and amounts
+
+[33mcommit 374316a8d4179dc31ad97bfc4a88ba88393c063a[m
+Author: goldduotw <151952616+goldduotw@users.noreply.github.com>
+Date:   Fri Feb 6 02:09:22 2026 +0000
+
+    checkout route
+
+[33mcommit fe3761d23e6353f7e11535409dbbb9a5d5ba6c97[m
+Author: goldduotw <151952616+goldduotw@users.noreply.github.com>
+Date:   Thu Feb 5 00:54:19 2026 +0000
+
+    fix: gitignore
+
+[33mcommit 19c7795437fa29fe97bd3718a8fa60848ffbc617[m
+Author: goldduotw <151952616+goldduotw@users.noreply.github.com>
+Date:   Thu Feb 5 00:48:44 2026 +0000
+
+    chore: remove .next from source control
+
+[33mcommit 0c32fa20fddaed7edca97c074c0155576b295b8e[m
+Author: goldduotw <151952616+goldduotw@users.noreply.github.com>
+Date:   Thu Feb 5 00:43:07 2026 +0000
+
+    fixed bill analyzer syntax and red alert box
+
+[33mcommit f060a07631168f1bdac3b08781ea95c1cd15ebdd[m
+Author: goldduotw <151952616+goldduotw@users.noreply.github.com>
+Date:   Wed Feb 4 00:28:48 2026 +0000
+
+    fix: restore centered compliance modal and tailwind v4 config.
+
+[33mcommit 7a3f3e8b5519cf1a42de0b42da0b86349baeec3a[m
+Author: goldduotw <151952616+goldduotw@users.noreply.github.com>
+Date:   Wed Jan 21 00:26:20 2026 -0500
+
+    Add files via upload
