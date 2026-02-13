@@ -165,13 +165,12 @@ const handleUMSUnlock = async (passedUser?: any) => {
   setError(null);
 
   try {
-    // 1. Force a session refresh to be 100% sure
-    const { data: { session } } = await supabase.auth.getSession();
-    const user = passedUser || session?.user;
+    // Check for user (prioritize the one passed back from redirect)
+    const { data: { user } } = await supabase.auth.getUser();
+    const activeUser = passedUser || user;
 
-    // GATE 1: No user? Go to Google and STOP.
-    if (!user) {
-      console.log("No session. Saving data and moving to Google...");
+    // If no user is confirmed, trigger Google and EXIT
+    if (!activeUser) {
       if (analysisResult) {
         localStorage.setItem('pending_audit', JSON.stringify(analysisResult));
       }
@@ -181,44 +180,41 @@ const handleUMSUnlock = async (passedUser?: any) => {
       
       await supabase.auth.signInWithOAuth({ 
         provider: 'google', 
-        options: { redirectTo: currentUrl.toString() } 
+        options: { 
+          redirectTo: currentUrl.toString(),
+          queryParams: { 
+            prompt: 'select_account', // Forces Google to show the account picker
+            access_type: 'offline' 
+          } 
+        } 
       });
 
-      return; // <--- This prevents the 401 error below
+      return; // Stop execution here to prevent the 401 error
     }
 
-    // GATE 2: Double-check logic for Stripe
-    console.log("Session verified. Calling Stripe API...");
-    let finalAuditId = initialData?.id || currentAuditId;
-
-    // Use a try/catch specifically for the API call to handle the 401 gracefully
+    // Only runs if a user is confirmed
     const response = await fetch('/api/checkout', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        auditId: finalAuditId,
+        auditId: initialData?.id || currentAuditId,
         billedAmount: analysisResult?.totalBilled,
-        analysisMarkdown: analysisResult?.markdown,
-        mode: 'subscription' 
+        analysisMarkdown: analysisResult?.markdown
       }),
     });
 
     if (response.status === 401) {
-       throw new Error("Session expired. Please sign in again.");
+      await supabase.auth.signOut();
+      throw new Error("Session expired. Please click again to sign in.");
     }
 
-    const sessionData = await response.json();
-    if (sessionData.url) {
-      window.location.href = sessionData.url;
-    } else {
-      throw new Error(sessionData.error || "Stripe Session Failed");
-    }
+    const data = await response.json();
+    if (data.url) window.location.href = data.url;
 
   } catch (err: any) {
-    console.error("Critical Flow Error:", err);
+    console.error("Unlock Error:", err);
     setIsSubscribing(false);
-    // Only show the error if we aren't currently redirecting
-    setError(err.message || "Connection Error. Please try again.");
+    setError(err.message || "Connection Error.");
   }
 };
 
@@ -321,12 +317,16 @@ useEffect(() => {
   const shouldCheckout = params.get('triggerCheckout');
   const savedData = localStorage.getItem('pending_audit');
 
-  const resumeFlow = async () => {
-    // Wait for the session to be fully picked up by the Supabase client
-    const { data: { session } } = await supabase.auth.getSession();
-    
-    if (session?.user && shouldCheckout === 'true' && savedData) {
-      console.log("Returned from Google. Resuming checkout...");
+  const initAuth = async () => {
+    // If NOT returning from Google for a checkout, clear the local session
+    if (shouldCheckout !== 'true') {
+      await supabase.auth.signOut();
+      return;
+    }
+
+    // If we ARE returning, get the user and resume
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user && savedData) {
       const data = JSON.parse(savedData);
       setAnalysisResult(data);
       
@@ -334,13 +334,12 @@ useEffect(() => {
       newUrl.searchParams.delete('triggerCheckout');
       window.history.replaceState({}, '', newUrl.toString());
 
-      // Pass the user directly to ensure Gate 1 is passed
-      handleUMSUnlock(session.user);
+      handleUMSUnlock(user);
       localStorage.removeItem('pending_audit');
     }
   };
 
-  resumeFlow();
+  initAuth();
 }, [initialData]);
 
 const uploadBill = async (dataUrl: string): Promise<string> => {
