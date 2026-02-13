@@ -311,33 +311,30 @@ useEffect(() => {
   const shouldCheckout = params.get('triggerCheckout');
   const savedData = localStorage.getItem('pending_audit');
 
-  const handleReturnFlow = async () => {
+  const processReturn = async () => {
+    // 1. If we see the flag, lock the UI immediately to stop the flash
     if (shouldCheckout === 'true') {
-      // 1. IMMEDIATELY lock the UI
       setIsSubscribing(true);
       
       const { data: { user } } = await supabase.auth.getUser();
+      
       if (user && savedData) {
         const data = JSON.parse(savedData);
         setAnalysisResult(data);
         
+        // 2. Clean the URL
         const newUrl = new URL(window.location.href);
         newUrl.searchParams.delete('triggerCheckout');
         window.history.replaceState({}, '', newUrl.toString());
 
-        // 2. Trigger the final jump to Stripe
+        // 3. Resume the Stripe jump
         handleUMSUnlock(user);
         localStorage.removeItem('pending_audit');
-        return; 
       }
     }
-
-    // Default: Reset for fresh visitors
-    await supabase.auth.signOut();
-    setIsSubscribing(false); // Only unlock UI if we aren't redirecting
   };
 
-  handleReturnFlow();
+  processReturn();
 }, [initialData]);
 
 const uploadBill = async (dataUrl: string): Promise<string> => {
@@ -450,22 +447,24 @@ const canAudit = (billText.trim().length > 0 || imageData !== null) && !isPendin
 const renderAnalysis = () => {
     if (!analysisResult) return null;
 
-    // --- REDIRECT GUARD: Prevents UI "flashing" during checkout jump ---
-    const isRedirecting = isSubscribing && new URLSearchParams(window.location.search).get('triggerCheckout') === 'true';
-    if (isRedirecting) {
+    // --- INSTANT REDIRECT GUARD ---
+    // We check the URL directly. This happens BEFORE the first paint.
+    const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+    const isReturningFromAuth = params?.get('triggerCheckout') === 'true';
+
+    if (isReturningFromAuth) {
       return (
-        <div className="flex flex-col items-center justify-center p-20 border-2 border-dashed rounded-3xl bg-blue-50/50 animate-pulse">
+        <div className="flex flex-col items-center justify-center p-20 border-2 border-dashed rounded-3xl bg-blue-50/50">
           <Loader2 className="h-10 w-10 animate-spin text-blue-600 mb-4" />
-          <h3 className="text-xl font-bold text-blue-900">Connecting to Secure Checkout...</h3>
+          <h3 className="text-xl font-bold text-blue-900">Finalizing Secure Connection...</h3>
           <p className="text-blue-600/70">Please wait while we prepare your clinical audit.</p>
         </div>
       );
     }
-    // ------------------------------------------------------------------
+    // ------------------------------
 
     const isUnlockedReport = initialData?.status === 'paid' || isUnlocked;
 
-    // FIXED: Full letter copy logic
     const copyLetterToClipboard = () => {
       const fullLetter = `
 DATE: ${new Date().toLocaleDateString()}
@@ -531,7 +530,7 @@ ${analysisResult.patientName}
         </div>
 
         {!isUnlockedReport ? (
-          /* LOCKED VIEW (REMAINS THE SAME) */
+          /* LOCKED VIEW */
           <div className="relative space-y-6">
             <Alert variant="destructive" className={`bg-red-50 border-red-200 p-8 rounded-2xl ${showPaywall ? "blur-md pointer-events-none opacity-60" : ""}`}>
               <div className="flex items-center justify-between gap-6">
@@ -653,7 +652,7 @@ ${analysisResult.patientName}
         )}
       </div>
     );
-  };
+};
 
 return (    
     <div className="grid gap-6">
