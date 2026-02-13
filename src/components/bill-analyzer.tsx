@@ -654,11 +654,11 @@ return (
         </div>
       )}
 
-      {/* 2. THE SIMPLIFIED MASTER GATE
-          If we are loading the app OR in the middle of a checkout redirect, 
-          show ONLY the loader.
+      {/* 2. THE SIMPLIFIED GATE 
+          We ONLY show the big spinner if the "isSubscribing" state is active.
+          This only happens when you click 'Subscribe' or during the Google/Stripe jump.
       */}
-      {isInitialLoading || isSubscribing ? (
+      {isSubscribing ? (
         <div className="flex flex-col items-center justify-center min-h-[500px] border-2 border-dashed rounded-3xl bg-slate-50/50">
           <Loader2 className="h-12 w-12 animate-spin text-blue-600 mb-4" />
           <h2 className="text-xl font-bold text-slate-900">Processing...</h2>
@@ -667,8 +667,8 @@ return (
       ) : (
         <>
           {/* 3. HOME PAGE (Upload Card)
-              SIMPLIFIED RULE: Once analysisResult exists OR we are pending, 
-              this card is GONE. No flashes.
+              This shows ONLY if there is no analysis result. 
+              Once an audit is done, this card disappears forever.
           */}
           {!analysisResult && !isPending && (
             <Card>
@@ -770,8 +770,8 @@ return (
             </Alert>
           )}
 
-          {/* 6. ANALYSIS RESULTS (VFD)
-              This only shows if we have results AND we aren't currently redirecting.
+          {/* 6. VFD RESULTS
+              This ONLY shows if we have data AND we aren't currently redirecting.
           */}
           {analysisResult?.markdown && !isSubscribing && (
             <Card className="border-none shadow-none bg-transparent">
