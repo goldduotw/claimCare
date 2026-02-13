@@ -165,11 +165,11 @@ const handleUMSUnlock = async (passedUser?: any) => {
   setError(null);
 
   try {
-    // Check for session
+    // 1. Force a session refresh to be 100% sure
     const { data: { session } } = await supabase.auth.getSession();
     const user = passedUser || session?.user;
 
-    // GATE 1: AUTHENTICATION
+    // GATE 1: No user? Go to Google and STOP.
     if (!user) {
       console.log("No session. Saving data and moving to Google...");
       if (analysisResult) {
@@ -184,13 +184,14 @@ const handleUMSUnlock = async (passedUser?: any) => {
         options: { redirectTo: currentUrl.toString() } 
       });
 
-      return; // CRITICAL: Stop here to prevent the 401 Unauthorized error
+      return; // <--- This prevents the 401 error below
     }
 
-    // GATE 2: CHECKOUT (Only reached if user exists)
+    // GATE 2: Double-check logic for Stripe
     console.log("Session verified. Calling Stripe API...");
     let finalAuditId = initialData?.id || currentAuditId;
 
+    // Use a try/catch specifically for the API call to handle the 401 gracefully
     const response = await fetch('/api/checkout', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -202,6 +203,10 @@ const handleUMSUnlock = async (passedUser?: any) => {
       }),
     });
 
+    if (response.status === 401) {
+       throw new Error("Session expired. Please sign in again.");
+    }
+
     const sessionData = await response.json();
     if (sessionData.url) {
       window.location.href = sessionData.url;
@@ -212,6 +217,7 @@ const handleUMSUnlock = async (passedUser?: any) => {
   } catch (err: any) {
     console.error("Critical Flow Error:", err);
     setIsSubscribing(false);
+    // Only show the error if we aren't currently redirecting
     setError(err.message || "Connection Error. Please try again.");
   }
 };
@@ -316,6 +322,7 @@ useEffect(() => {
   const savedData = localStorage.getItem('pending_audit');
 
   const resumeFlow = async () => {
+    // Wait for the session to be fully picked up by the Supabase client
     const { data: { session } } = await supabase.auth.getSession();
     
     if (session?.user && shouldCheckout === 'true' && savedData) {
@@ -323,12 +330,11 @@ useEffect(() => {
       const data = JSON.parse(savedData);
       setAnalysisResult(data);
       
-      // Clean up the URL
       const newUrl = new URL(window.location.href);
       newUrl.searchParams.delete('triggerCheckout');
       window.history.replaceState({}, '', newUrl.toString());
 
-      // PASS USER OBJECT: This skips the getUser() delay in handleUMSUnlock
+      // Pass the user directly to ensure Gate 1 is passed
       handleUMSUnlock(session.user);
       localStorage.removeItem('pending_audit');
     }
