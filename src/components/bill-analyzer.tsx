@@ -160,14 +160,16 @@ const handleVFDClick = () => {
 // Feature 3: Deferred Write - Hits Supabase ONLY on Unlock
 // Inside your BillAnalyzer component, replace handleUMSUnlock with this:
 
-const handleUMSUnlock = async () => {
-  setIsSubscribing(true); // This will grey out the button immediately
+const handleUMSUnlock = async (passedUser?: any) => {
+  setIsSubscribing(true);
   setError(null);
 
   try {
-    const { data: { user } } = await supabase.auth.getUser();
+    // If passedUser exists, use it. If not, wait for Supabase to find the user.
+    const user = passedUser || (await supabase.auth.getUser()).data.user;
 
     if (!user) {
+      // Still no user? Save the data and send them to Google.
       if (analysisResult) {
         localStorage.setItem('pending_audit', JSON.stringify(analysisResult));
       }
@@ -180,8 +182,10 @@ const handleUMSUnlock = async () => {
       return;
     }
 
+    // Determine which Audit ID to use
     let finalAuditId = initialData?.id || currentAuditId;
 
+    // If no ID exists yet, create the record in Supabase first
     if (!finalAuditId && analysisResult) {
       const { data: record, error: dbError } = await supabase
         .from('audits')
@@ -201,6 +205,7 @@ const handleUMSUnlock = async () => {
       setCurrentAuditId(finalAuditId);
     }
 
+    // HIT THE CHECKOUT API
     const response = await fetch('/api/checkout', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -218,11 +223,13 @@ const handleUMSUnlock = async () => {
     const session = await response.json();
     if (session.url) {
       window.location.href = session.url;
+    } else {
+      throw new Error(session.error || "Stripe session failed");
     }
   } catch (err: any) {
     console.error("Unlock Error:", err);
-    setIsSubscribing(false); // Bring the button back if it fails
-    setError("Connection Error. Please try again.");
+    setIsSubscribing(false);
+    setError(err.message || "Connection Error. Please try again.");
   }
 };
 
@@ -325,29 +332,27 @@ useEffect(() => {
   const shouldCheckout = params.get('triggerCheckout');
   const savedData = localStorage.getItem('pending_audit');
 
-  // FAST-PATH: If we find a session token in storage, stop the loading spinner immediately
-  // This bypasses the 300ms-500ms network delay of the official Supabase handshake.
-  const hasToken = document.cookie.includes('sb-access-token') || 
-                   Object.keys(localStorage).some(key => key.includes('auth-token'));
-  
-  if (hasToken || initialData) {
-    setIsInitialLoading(false);
-  }
-
-  if (shouldCheckout === 'true' && savedData) {
-    const data = JSON.parse(savedData);
-    setAnalysisResult(data);
+  const processPostLogin = async () => {
+    // getSession is faster and more reliable than getUser for redirects
+    const { data: { session } } = await supabase.auth.getSession();
     
-    const newUrl = new URL(window.location.href);
-    newUrl.searchParams.delete('triggerCheckout');
-    window.history.replaceState({}, '', newUrl.toString());
+    if (session?.user && shouldCheckout === 'true' && savedData) {
+      const data = JSON.parse(savedData);
+      setAnalysisResult(data);
+      
+      // Clean up the URL
+      const newUrl = new URL(window.location.href);
+      newUrl.searchParams.delete('triggerCheckout');
+      window.history.replaceState({}, '', newUrl.toString());
 
-    setTimeout(() => {
-      handleUMSUnlock();
+      // Pass the user to the function
+      handleUMSUnlock(session.user);
       localStorage.removeItem('pending_audit');
-    }, 100);
-  }
-}, [initialData]); // Added initialData to dependency for safety
+    }
+  };
+
+  processPostLogin();
+}, [initialData]);
 
 const uploadBill = async (dataUrl: string): Promise<string> => {
   return dataUrl; 
