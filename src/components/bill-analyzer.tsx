@@ -654,18 +654,17 @@ return (
         </div>
       )}
 
-      {/* --- ADDED GATE START --- */}
-      {/* If the URL has triggerCheckout, show ONLY this loader and hide everything else */}
-      {typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('triggerCheckout') === 'true' ? (
-        <div className="flex flex-col items-center justify-center min-h-[400px] border-2 border-dashed rounded-3xl bg-blue-50/50">
+      {/* --- IMPROVED GATE --- */}
+      {/* Stay in "Loading Mode" if the URL flag is present OR if we are currently subscribing */}
+      {(isSubscribing || (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('triggerCheckout') === 'true')) ? (
+        <div className="flex flex-col items-center justify-center min-h-[500px] border-2 border-dashed rounded-3xl bg-blue-50/50">
           <Loader2 className="h-10 w-10 animate-spin text-blue-600 mb-4" />
-          <h3 className="text-xl font-bold text-blue-900">Connecting to Secure Checkout...</h3>
-          <p className="text-blue-600/70">Please wait a moment.</p>
+          <h3 className="text-xl font-bold text-blue-900">Finalizing Your Secure Audit...</h3>
+          <p className="text-blue-600/70">Connecting to the payment portal, please wait.</p>
         </div>
       ) : (
-        /* This fragment ( <></> ) holds all your original code */
         <>
-          {/* 2. YOUR ORIGINAL UPLOAD CARD */}
+          {/* 2. UPLOAD CARD */}
           {!showPaywall && !analysisResult && (
             <Card>
               <CardHeader>
@@ -764,7 +763,7 @@ return (
             </Card>
           )}
 
-          {/* 3. YOUR ORIGINAL LOADING STATE */}
+          {/* 3. PENDING STATE */}
           {isPending && (
             <Card>
               <CardHeader><CardTitle>Analyzing...</CardTitle></CardHeader>
@@ -795,7 +794,7 @@ return (
             </Card>
           )}
 
-          {/* 6. RECEPTIONIST VIEW MODAL */}
+          {/* 6. MODAL */}
           {showReceptionistView && (
             <ReceptionistViewModal
               isOpen={showReceptionistView}
@@ -808,7 +807,6 @@ return (
           )}
         </>
       )}
-      {/* --- ADDED GATE END --- */}
     </div>
   );
 }
