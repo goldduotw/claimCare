@@ -165,27 +165,28 @@ const handleUMSUnlock = async (passedUser?: any) => {
   setError(null);
 
   try {
-    // If passedUser exists, use it. If not, wait for Supabase to find the user.
     const user = passedUser || (await supabase.auth.getUser()).data.user;
 
+    // IF NO USER: Go to Google and STOP EXECUTION here
     if (!user) {
-      // Still no user? Save the data and send them to Google.
       if (analysisResult) {
         localStorage.setItem('pending_audit', JSON.stringify(analysisResult));
       }
       const currentUrl = new URL(window.location.href);
       currentUrl.searchParams.set('triggerCheckout', 'true');
-      await supabase.auth.signInWithOAuth({ 
+      
+      const { error: authError } = await supabase.auth.signInWithOAuth({ 
         provider: 'google', 
         options: { redirectTo: currentUrl.toString() } 
       });
-      return;
+
+      if (authError) throw authError;
+      return; // CRITICAL: Stop the function so it doesn't try to fetch /api/checkout
     }
 
-    // Determine which Audit ID to use
+    // IF USER EXISTS: Proceed to Stripe
     let finalAuditId = initialData?.id || currentAuditId;
 
-    // If no ID exists yet, create the record in Supabase first
     if (!finalAuditId && analysisResult) {
       const { data: record, error: dbError } = await supabase
         .from('audits')
@@ -205,31 +206,27 @@ const handleUMSUnlock = async (passedUser?: any) => {
       setCurrentAuditId(finalAuditId);
     }
 
-    // HIT THE CHECKOUT API
     const response = await fetch('/api/checkout', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         auditId: finalAuditId,
         billedAmount: analysisResult?.totalBilled,
-        expectedAmount: analysisResult?.totalExpected,
-        reasoning: analysisResult?.reasoning,
-        patientName: analysisResult?.patientName || "Valued Patient",
-        analysisMarkdown: analysisResult?.markdown,
-        mode: 'subscription' 
+        analysisMarkdown: analysisResult?.markdown
       }),
     });
 
-    const session = await response.json();
-    if (session.url) {
-      window.location.href = session.url;
+    const data = await response.json();
+    if (data.url) {
+      window.location.href = data.url;
     } else {
-      throw new Error(session.error || "Stripe session failed");
+      throw new Error(data.error || "Stripe Connection Failed");
     }
+
   } catch (err: any) {
     console.error("Unlock Error:", err);
     setIsSubscribing(false);
-    setError(err.message || "Connection Error. Please try again.");
+    setError(err.message || "Connection Error.");
   }
 };
 
@@ -333,19 +330,19 @@ useEffect(() => {
   const savedData = localStorage.getItem('pending_audit');
 
   const processPostLogin = async () => {
-    // getSession is faster and more reliable than getUser for redirects
+    // Using getSession as it's the most reliable for immediate post-redirects
     const { data: { session } } = await supabase.auth.getSession();
     
     if (session?.user && shouldCheckout === 'true' && savedData) {
+      console.log("Found session and trigger. Starting Auto-Pay...");
       const data = JSON.parse(savedData);
       setAnalysisResult(data);
       
-      // Clean up the URL
       const newUrl = new URL(window.location.href);
       newUrl.searchParams.delete('triggerCheckout');
       window.history.replaceState({}, '', newUrl.toString());
 
-      // Pass the user to the function
+      // Pass the confirmed user directly
       handleUMSUnlock(session.user);
       localStorage.removeItem('pending_audit');
     }
