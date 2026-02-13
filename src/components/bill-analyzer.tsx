@@ -654,33 +654,76 @@ return (
         </div>
       )}
 
-      {/* 2. THE REDIRECT OVERLAY - This stops the flashing */}
+      {/* 2. THE REDIRECT OVERLAY (Only shows when explicitly connecting) */}
       {isSubscribing && (
         <div className="fixed inset-0 z-[100] bg-white/90 backdrop-blur-sm flex flex-col items-center justify-center animate-in fade-in duration-300">
           <div className="bg-white p-12 rounded-3xl shadow-2xl border flex flex-col items-center text-center max-w-md">
-            <div className="bg-blue-50 p-4 rounded-full mb-6">
-              <Loader2 className="h-12 w-12 animate-spin text-blue-600" />
-            </div>
-            <h2 className="text-2xl font-black text-slate-900 mb-2">Connecting to Secure Checkout</h2>
-            <p className="text-slate-500 font-medium">Please wait while we prepare your clinical audit for export.</p>
-            <div className="mt-8 flex gap-2">
-              <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-              <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-              <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-            </div>
+            <Loader2 className="h-12 w-12 animate-spin text-blue-600 mb-6" />
+            <h2 className="text-2xl font-black text-slate-900 mb-2">Connecting to Checkout</h2>
+            <p className="text-slate-500">Please wait while we verify your session...</p>
           </div>
         </div>
       )}
 
-      {/* 3. YOUR ORIGINAL UPLOAD CARD (Hidden if redirecting) */}
-      {!showPaywall && !analysisResult && !isSubscribing && (
+      {/* 3. UPLOAD CARD (Shows ONLY if there's no result and not currently auditing) */}
+      {!analysisResult && !isPending && (
         <Card>
-          {/* ... existing CardContent ... */}
+          <CardHeader>
+            <CardTitle>Analyze Your Bill</CardTitle>
+            <CardDescription>
+              Paste the text from your hospital bill, or upload a photo of it.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleAudit} className="space-y-4">
+              <div className="space-y-4">
+                <div>
+                  <h3 className="font-semibold mb-2 text-slate-900">Medical Bill</h3>
+                  {imageData ? (
+                    <div className="relative">
+                      <img src={imageData} alt="Preview" className="rounded-md max-h-60 w-auto" />
+                      <Button type="button" variant="ghost" size="icon" className="absolute top-2 right-2" onClick={clearImage}>
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <Textarea
+                      placeholder="Paste your bill text here..."
+                      className="min-h-[200px]"
+                      value={billText}
+                      onChange={(e) => setBillText(e.target.value)}
+                    />
+                  )}
+                  <input type="file" accept="image/*" ref={billFileInputRef} onChange={handleBillFileChange} className="hidden" />
+                  <Button type="button" variant="outline" className="mt-2" onClick={() => billFileInputRef.current?.click()}>
+                    <Camera className="mr-2 h-4 w-4" /> Camera / Upload
+                  </Button>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-4 pt-4 border-t">
+                <Button type="submit" size="lg" disabled={!canAudit} className="bg-blue-600 text-white">
+                  Audit My Bill
+                </Button>
+              </div>
+            </form>
+          </CardContent>
         </Card>
       )}
 
-      {/* 4. ANALYSIS RESULTS (Hidden if redirecting) */}
-      {analysisResult?.markdown && !isSubscribing && (
+      {/* 4. AI AUDITING STATE (Original) */}
+      {isPending && (
+        <Card>
+          <CardHeader><CardTitle>Analyzing...</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
+            <div className="h-4 bg-muted rounded w-3/4 animate-pulse"></div>
+            <div className="h-4 bg-muted rounded w-1/2 animate-pulse"></div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 5. ANALYSIS RESULTS */}
+      {analysisResult?.markdown && (
         <Card className="animate-in fade-in-50 duration-500 border-none shadow-none bg-transparent">
           <CardContent ref={analysisRef} className="p-0">
             {renderAnalysis()}
@@ -688,24 +731,7 @@ return (
         </Card>
       )}
 
-      {/* 5. REMAINING STATES (Hidden if redirecting) */}
-      {!isSubscribing && (
-        <>
-          {isPending && (
-            <Card>
-              <CardHeader><CardTitle>Analyzing...</CardTitle></CardHeader>
-              {/* ... */}
-            </Card>
-          )}
-          {error && (
-            <Alert variant="destructive">
-              {/* ... */}
-            </Alert>
-          )}
-        </>
-      )}
-
-      {/* 6. RECEPTIONIST VIEW MODAL */}
+      {/* 6. MODAL (Keep outside main flow) */}
       {showReceptionistView && (
         <ReceptionistViewModal
           isOpen={showReceptionistView}
