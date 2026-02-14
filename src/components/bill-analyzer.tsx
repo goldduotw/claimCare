@@ -219,13 +219,11 @@ const handleAudit = async (event: React.FormEvent<HTMLFormElement>) => {
   event.preventDefault();
   setError(null);
 
-  // --- ADDED PROTECTION SWITCH ---
   const isAllowed = await checkRateLimit();
   if (!isAllowed) {
     setError("Rate limit exceeded. Please wait 15 minutes before trying again.");
     return;
   }
-  // -------------------------------
 
   setIsPending(true);
 
@@ -239,14 +237,26 @@ const handleAudit = async (event: React.FormEvent<HTMLFormElement>) => {
     const result = await analyzeBill(analysisInput);
 
     if (result.success) {
-      // THIS BLOCK TRIGGERS THE TEASER
-      setAnalysisResult({
-        markdown: result.data.analysisMarkdown || '', // Ensure this matches your AI output key
+      // --- NEW: GENERATE TEMPORARY ID ---
+      const tempId = crypto.randomUUID();
+      
+      const newAnalysis = {
+        markdown: result.data.analysisMarkdown || '',
         totalBilled: result.totalBilled,
         totalExpected: result.totalExpected,
         reasoning: result.reasoning,
         patientName: result.patientName || "" 
-      });
+      };
+
+      // 1. Update State
+      setAnalysisResult(newAnalysis);
+      setCurrentAuditId(tempId); // This fixes the 'id: null' bug
+
+      // 2. Backup to LocalStorage (Crucial for Vercel/Redirects)
+      localStorage.setItem('pending_audit', JSON.stringify(newAnalysis));
+      localStorage.setItem('pending_audit_id', tempId);
+
+      console.log("AUDIT GENERATED: ID set to", tempId);
     } else {
       setError(result.error || "An error occurred.");
     }
@@ -311,29 +321,28 @@ useEffect(() => {
   const params = new URLSearchParams(window.location.search);
   const shouldCheckout = params.get('triggerCheckout');
   const savedData = localStorage.getItem('pending_audit');
+  const savedId = localStorage.getItem('pending_audit_id'); // Get the backup ID
 
   const handleReturnFlow = async () => {
     if (shouldCheckout === 'true') {
-      // Keep isSubscribing true to prevent Home/VFD flashes
       setIsSubscribing(true);
       
       const { data: { user } } = await supabase.auth.getUser();
       
-      if (user && savedData) {
+      if (user && savedData && savedId) {
         const data = JSON.parse(savedData);
         setAnalysisResult(data);
+        setCurrentAuditId(savedId); // Restore the ID
         
-        // Clean the URL so a refresh doesn't loop
         const newUrl = new URL(window.location.href);
         newUrl.searchParams.delete('triggerCheckout');
         window.history.replaceState({}, '', newUrl.toString());
 
-        // Jump to Stripe immediately
+        // Now handleUMSUnlock will have the correct 'auditIdToLock'
         handleUMSUnlock(user);
         return; 
       }
     }
-    // Only turn off the "Curtain" if we aren't in a checkout flow
     setIsSubscribing(false); 
   };
 
