@@ -170,12 +170,12 @@ const handleVFDClick = () => {
 // Inside your BillAnalyzer component, replace handleUMSUnlock with this:
 
 const handleUMSUnlock = async (passedUser?: any) => {
-  // 1. AUTH HANDSHAKE: Check for existing session or passed user
+  // 1. AUTH HANDSHAKE: Get session
   const { data: { session } } = await supabase.auth.getSession();
   const currentUser = session?.user || passedUser;
 
   if (!currentUser) {
-    console.log("No session. Saving state and redirecting...");
+    console.log("No session. Saving state and redirecting to Google...");
     localStorage.setItem('pending_audit', JSON.stringify(analysisResult));
     localStorage.setItem('pending_audit_id', currentAuditId);
 
@@ -189,7 +189,7 @@ const handleUMSUnlock = async (passedUser?: any) => {
     return; 
   }
 
-  // 2. LOCK DATA: Grab state immediately
+  // 2. LOCK DATA: Grab state immediately (Preserved your logic)
   const auditIdToLock = currentAuditId;
   const resultToLock = analysisResult;
 
@@ -199,46 +199,60 @@ const handleUMSUnlock = async (passedUser?: any) => {
   }
 
   setIsSubscribing(true);
-  setError(null); // Clear any old errors
+  setError(null); // Clear previous error state
 
-  // 3. INTERNAL EXECUTION FUNCTION (Allows for an automatic retry)
-  const executeCheckout = async (retryCount = 0): Promise<void> => {
-    try {
-      const response = await fetch('/api/checkout', {
+  // 3. THE EXECUTION (Preserved your exact Fetch logic)
+  try {
+    let response = await fetch('/api/checkout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include', 
+      body: JSON.stringify({
+            auditId: auditIdToLock,
+            billedAmount: resultToLock?.totalBilled || 0,
+            expectedAmount: resultToLock?.totalExpected || 0,
+            analysisMarkdown: resultToLock?.markdown || "", 
+            patientName: resultToLock?.patientName || "",
+            reasoning: resultToLock?.reasoning || "Discrepancy detected",
+            email: currentUser.email 
+      }),
+    });
+
+    // 4. THE SYNC FIX: If the server says Unauthorized, don't show the error yet.
+    // Wait 1.5s for cookies to sync and try ONE more time silently.
+    if (response.status === 401) {
+      console.log("Cookie sync gap detected. Retrying once...");
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      response = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include', 
+        credentials: 'include',
         body: JSON.stringify({
-              auditId: auditIdToLock,
-              billedAmount: resultToLock?.totalBilled || 0,
-              expectedAmount: resultToLock?.totalExpected || 0,
-              analysisMarkdown: resultToLock?.markdown || "", 
-              patientName: resultToLock?.patientName || "",
-              reasoning: resultToLock?.reasoning || "Discrepancy detected",
-              email: currentUser.email 
+          auditId: auditIdToLock,
+          billedAmount: resultToLock?.totalBilled || 0,
+          expectedAmount: resultToLock?.totalExpected || 0,
+          analysisMarkdown: resultToLock?.markdown || "",
+          patientName: resultToLock?.patientName || "",
+          reasoning: resultToLock?.reasoning || "Discrepancy detected",
+          email: currentUser.email
         }),
       });
-
-      const data = await response.json();
-
-      if (data.url) {
-        window.location.href = data.url;
-      } else if (response.status === 401 && retryCount < 1) {
-        // RACE CONDITION FIX: If unauthorized, wait 1.5 seconds and try once more
-        console.log("Session not yet synced to server. Retrying...");
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        return executeCheckout(retryCount + 1);
-      } else {
-        setIsSubscribing(false);
-        setError(data.error || "Please sign in again.");
-      }
-    } catch (err) {
-      setIsSubscribing(false);
-      setError("Connection error. Please try again.");
     }
-  };
 
-  await executeCheckout();
+    const data = await response.json();
+
+    if (data.url) {
+      window.location.href = data.url;
+    } else {
+      setIsSubscribing(false);
+      console.error("CHECKOUT_ERROR:", data.error);
+      setError(data.error || "Session expired. Please sign in again.");
+    }
+  } catch (err) {
+    setIsSubscribing(false);
+    console.error("FETCH_CRASH:", err);
+    setError("Connection error. Please try again.");
+  }
 };
 
 // Feature 1: IP Rate Limit inside handleAudit
