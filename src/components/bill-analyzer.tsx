@@ -408,9 +408,26 @@ const handleBillFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
   const file = event.target.files?.[0];
   if (file) {
     const reader = new FileReader();
-    reader.onloadend = () => {
-      setImageData(reader.result as string);
-      setBillText(''); 
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        // Max 1200px width keeps the file small but text sharp for AI
+        const MAX_WIDTH = 1200; 
+        const scale = MAX_WIDTH / img.width;
+        
+        canvas.width = MAX_WIDTH;
+        canvas.height = img.height * scale;
+
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+        // JPEG at 0.7 quality is the "sweet spot" for file size vs clarity
+        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+        setImageData(compressedBase64);
+        setBillText('');
+      };
+      img.src = e.target?.result as string;
     };
     reader.readAsDataURL(file);
   }
