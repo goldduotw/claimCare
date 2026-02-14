@@ -168,23 +168,10 @@ const handleVFDClick = () => {
 // Inside your BillAnalyzer component, replace handleUMSUnlock with this:
 
 const handleUMSUnlock = async (passedUser?: any) => {
-  // 1. CAPTURE & LOCK: Grab current state immediately so re-renders don't wipe it
   const auditIdToLock = currentAuditId;
   const resultToLock = analysisResult;
 
-  // 2. BROWSER DEBUG: Verify the payload in your JS console
-  console.log("--- STRIPE PAYLOAD CHECK ---");
-  console.table({
-    auditId: auditIdToLock,
-    patient: resultToLock?.patientName,
-    billed: resultToLock?.totalBilled,
-    expected: resultToLock?.totalExpected,
-    hasMarkdown: !!resultToLock?.markdown
-  });
-
-  // 3. VALIDATE: Stop if we are about to send 'null' to Stripe
   if (!auditIdToLock || auditIdToLock === 'null') {
-    console.error("STOPPING: auditId is missing from state.");
     setError("Could not link this payment to your audit. Please try again.");
     return;
   }
@@ -192,38 +179,30 @@ const handleUMSUnlock = async (passedUser?: any) => {
   setIsSubscribing(true);
 
   try {
-    // 4. FETCH: Note the 'credentials' addition to fix Vercel 401 errors
     const response = await fetch('/api/checkout', {
       method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json' 
-      },
-      credentials: 'include', // Forces browser to send Supabase Auth cookies to Vercel
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include', // <--- CRITICAL: This sends your session cookies to Vercel
       body: JSON.stringify({
         auditId: auditIdToLock,
         billedAmount: resultToLock?.totalBilled || 0,
         expectedAmount: resultToLock?.totalExpected || 0,
         analysisMarkdown: resultToLock?.markdown || "",
         patientName: resultToLock?.patientName || "Valued Patient",
-        reasoning: resultToLock?.reasoning || "Medical discrepancy detected"
+        reasoning: resultToLock?.reasoning || "Discrepancy detected"
       }),
     });
 
     const data = await response.json();
-
     if (data.url) {
-      // 5. REDIRECT: Go to Stripe
       window.location.href = data.url;
     } else {
       setIsSubscribing(false);
-      // Catch specific errors like the 401 you were seeing
-      console.error("SERVER_ERROR_FROM_API:", data.error);
-      setError(data.error || "Checkout failed to initialize.");
+      setError(data.error || "Please log in again.");
     }
   } catch (err) {
     setIsSubscribing(false);
-    console.error("NETWORK_OR_VERCEL_ERROR:", err);
-    setError("Connection error. Please check your internet and try again.");
+    setError("Connection error. Please try again.");
   }
 };
 
