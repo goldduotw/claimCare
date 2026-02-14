@@ -159,43 +159,55 @@ export function ReceptionistViewModal({ isOpen, onClose, details, analysisTable,
                 {/* Main Report Content */}
                 <div ref={modalContentRef} className={`p-4 md:p-8 w-full max-w-full transition-all duration-700 ${!isUnlocked ? 'blur-2xl pointer-events-none opacity-50' : 'blur-0 opacity-100'}`}>
                     <DialogHeader>
-                        <DialogTitle className="text-xl font-bold text-center text-blue-900 uppercase tracking-tight break-words">Patient Advocacy Report</DialogTitle>
-                        <p className="text-center text-sm text-gray-500 font-medium">Verified for {details.patientName || "the Patient"}</p>
+                        {/* Adjusted font size for mobile to prevent overflow */}
+                        <DialogTitle className="text-lg md:text-xl font-bold text-center text-blue-900 uppercase tracking-tight break-words px-2">
+                            Patient Advocacy Report
+                        </DialogTitle>
+                        <p className="text-center text-xs md:text-sm text-gray-500 font-medium">Verified for {details.patientName || "the Patient"}</p>
                     </DialogHeader>
 
                     <div className="my-6 border-4 border-dashed border-green-500 rounded-xl p-4 bg-green-50 text-center w-full max-w-full overflow-hidden">
-                        {/* Simplified stacking logic */}
-                        <div className="flex flex-col md:flex-row justify-center items-center">
+                        <div className="flex flex-col md:flex-row justify-center items-center gap-4">
                             <div className="py-2">
                                 <p className="text-[10px] uppercase text-gray-400 font-bold">Fair Price</p>
-                                <p className="text-3xl md:text-4xl font-black text-green-600 leading-none">{details.expectedAmount}</p>
+                                <p className="text-2xl md:text-4xl font-black text-green-600 leading-none">{details.expectedAmount}</p>
                             </div>
                             
-                            {/* Divider: Only shows on desktop */}
+                            {/* Desktop Divider */}
                             <div className="hidden md:block border-r border-gray-200 h-12 mx-8"></div>
                             
-                            {/* Mobile Divider: Only shows on phone */}
-                            <div className="w-16 border-t border-gray-200 my-4 md:hidden"></div>
+                            {/* Mobile Divider */}
+                            <div className="w-16 border-t border-gray-200 my-2 md:hidden"></div>
                             
                             <div className="py-2">
                                 <p className="text-[10px] uppercase text-gray-400 font-bold">Billed Amount</p>
-                                <p className="text-3xl md:text-4xl font-black text-red-500 leading-none">{details.billedAmount}</p>
+                                <p className="text-2xl md:text-4xl font-black text-red-500 leading-none">{details.billedAmount}</p>
                             </div>
                         </div>
                     </div>
 
-                    {/* UPDATED: Added w-full and min-w-0 to force the table to stay inside the portrait frame */}
                     <div className="border rounded-xl overflow-hidden shadow-sm overflow-x-auto w-full min-w-0">
                         <Table className="w-full">
                             <TableHeader className="bg-gray-50">
                                 <TableRow>
-                                    {headers.map((h, i) => <TableHead key={i} className="font-bold whitespace-nowrap">{h}</TableHead>)}
+                                    {headers.map((h, i) => (
+                                        <TableHead key={i} className="font-bold whitespace-nowrap text-[10px] md:text-sm px-2">
+                                            {h}
+                                        </TableHead>
+                                    ))}
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {rows.map((row, ri) => (
                                     <TableRow key={ri}>
-                                        {row.map((c, ci) => <TableCell key={ci} className="py-4 text-sm font-medium whitespace-nowrap">{c}</TableCell>)}
+                                        {row.map((c, ci) => (
+                                            <TableCell 
+                                                key={ci} 
+                                                className={`py-4 text-[11px] md:text-sm font-medium px-2 ${typeof c === 'string' && c.includes('Verify') ? 'whitespace-normal min-w-[120px]' : 'whitespace-nowrap'}`}
+                                            >
+                                                {c}
+                                            </TableCell>
+                                        ))}
                                     </TableRow>
                                 ))}
                             </TableBody>
@@ -203,10 +215,10 @@ export function ReceptionistViewModal({ isOpen, onClose, details, analysisTable,
                     </div>
                 </div>
 
-                {/* Overlay Layer - Adjusted padding and width for mobile */}
+                {/* Overlay Layer */}
                 {!isUnlocked && (
                     <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-4 bg-white/5">
-                        <div className="animate-in fade-in zoom-in duration-300 flex flex-col items-center bg-white p-6 md:p-10 rounded-3xl shadow-2xl border border-gray-100 w-full max-w-[320px] mx-auto">
+                        <div className="animate-in fade-in zoom-in duration-300 flex flex-col items-center bg-white p-6 md:p-10 rounded-3xl shadow-2xl border border-gray-100 w-full max-w-[300px] md:max-w-sm mx-auto">
                             <div className="bg-blue-50 p-4 rounded-full mb-4">
                                 <Lock className="h-8 w-8 text-blue-600" />
                             </div>
