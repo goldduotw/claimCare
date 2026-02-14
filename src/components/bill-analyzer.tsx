@@ -170,13 +170,12 @@ const handleVFDClick = () => {
 // Inside your BillAnalyzer component, replace handleUMSUnlock with this:
 
 const handleUMSUnlock = async (passedUser?: any) => {
-  // 1. REFRESH & SYNC: Force cookies to update before we do anything
-  // This is the "secret sauce" for fixing the 401 on mobile redirects.
-  const { data: { session }, error: refreshError } = await supabase.auth.refreshSession();
+  // 1. FORCED SYNC: Tell the phone to write the cookies immediately
+  const { data: { session } } = await supabase.auth.refreshSession();
   const currentUser = session?.user || passedUser;
 
   if (!currentUser) {
-    console.log("No session. Saving state and redirecting to Google...");
+    // Save state so we don't lose the bill data during the Google jump
     localStorage.setItem('pending_audit', JSON.stringify(analysisResult));
     localStorage.setItem('pending_audit_id', currentAuditId);
 
@@ -190,7 +189,7 @@ const handleUMSUnlock = async (passedUser?: any) => {
     return; 
   }
 
-  // 2. LOCK DATA: (Your original logic preserved)
+  // 2. DATA LOCK: (Your original 20 lines of logic preserved)
   const auditIdToLock = currentAuditId;
   const resultToLock = analysisResult;
 
@@ -202,42 +201,49 @@ const handleUMSUnlock = async (passedUser?: any) => {
   setIsSubscribing(true);
   setError(null); 
 
-  try {
-    // 3. THE FETCH (Your original logic preserved)
-    const response = await fetch('/api/checkout', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include', // Crucial for sending the cookies we just refreshed
-      body: JSON.stringify({
-            auditId: auditIdToLock,
-            billedAmount: resultToLock?.totalBilled || 0,
-            expectedAmount: resultToLock?.totalExpected || 0,
-            analysisMarkdown: resultToLock?.markdown || "", 
-            patientName: resultToLock?.patientName || "",
-            reasoning: resultToLock?.reasoning || "Discrepancy detected",
-            email: currentUser.email 
-      }),
-    });
+  // 3. THE "SILENT ENGINE": This pushes through to the Pay Screen
+  const openStripe = async (attempts = 3) => {
+    try {
+      const response = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', 
+        body: JSON.stringify({
+              auditId: auditIdToLock,
+              billedAmount: resultToLock?.totalBilled || 0,
+              expectedAmount: resultToLock?.totalExpected || 0,
+              analysisMarkdown: resultToLock?.markdown || "", 
+              patientName: resultToLock?.patientName || "",
+              reasoning: resultToLock?.reasoning || "Discrepancy detected",
+              email: currentUser.email 
+        }),
+      });
 
-    const data = await response.json();
+      const data = await response.json();
 
-    if (data.url) {
-      window.location.href = data.url;
-    } else {
-      setIsSubscribing(false);
-      console.error("CHECKOUT_ERROR:", data.error);
-      // GENTLE ERROR: If it's STILL unauthorized, we provide a logout fix
-      if (data.error?.includes("Unauthorized")) {
-        setError("Session sync issue. Please try clicking once more or refresh the page.");
+      if (data.url) {
+        // SUCCESS: Straight to the pay screen
+        window.location.href = data.url;
+      } else if (response.status === 401 && attempts > 0) {
+        // COOKIE DELAY: The phone hasn't finished saving the login yet.
+        // Wait 800ms and try again automatically. User just sees the spinner.
+        await new Promise(r => setTimeout(r, 800));
+        return openStripe(attempts - 1);
       } else {
+        setIsSubscribing(false);
         setError(data.error || "Please sign in again.");
       }
+    } catch (err) {
+      if (attempts > 0) {
+        await new Promise(r => setTimeout(r, 800));
+        return openStripe(attempts - 1);
+      }
+      setIsSubscribing(false);
+      setError("Connection error. Please try again.");
     }
-  } catch (err) {
-    setIsSubscribing(false);
-    console.error("FETCH_CRASH:", err);
-    setError("Connection error. Please try again.");
-  }
+  };
+
+  await openStripe();
 };
 
 // Feature 1: IP Rate Limit inside handleAudit
