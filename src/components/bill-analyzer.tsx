@@ -170,23 +170,18 @@ const handleVFDClick = () => {
 // Inside your BillAnalyzer component, replace handleUMSUnlock with this:
 
 const handleUMSUnlock = async (passedUser?: any) => {
-  // 1. AUTH HANDSHAKE: Ensure we have a valid session
+  // 1. AUTH HANDSHAKE: Check for existing session or passed user
   const { data: { session } } = await supabase.auth.getSession();
-
-  // Check both the live session AND the passedUser from the useEffect
   const currentUser = session?.user || passedUser;
 
   if (!currentUser) {
-    console.log("No session found. Saving state and triggering Google Login...");
-    
-    // BACKUP: Save current progress so it's there when we return
+    console.log("No session. Saving state and redirecting...");
     localStorage.setItem('pending_audit', JSON.stringify(analysisResult));
     localStorage.setItem('pending_audit_id', currentAuditId);
 
     await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { 
-        // SMART REDIRECT: Add the flag so the useEffect knows to finish the job
         redirectTo: `${window.location.origin}${window.location.pathname}?triggerCheckout=true`,
         queryParams: { prompt: 'select_account' } 
       }
@@ -198,56 +193,52 @@ const handleUMSUnlock = async (passedUser?: any) => {
   const auditIdToLock = currentAuditId;
   const resultToLock = analysisResult;
 
-  // 3. PRE-FLIGHT CHECK: Log the payload
-  console.log("--- STRIPE PAYLOAD CHECK ---", {
-    auditId: auditIdToLock,
-    patient: resultToLock?.patientName,
-    userEmail: currentUser.email 
-  });
-
   if (!auditIdToLock || auditIdToLock === 'null') {
     setError("Could not link this payment to your audit. Please try again.");
     return;
   }
 
   setIsSubscribing(true);
-  setError(null); // Clear any old "Unauthorized" ghosts before starting
+  setError(null); // Clear any old errors
 
-  try {
-    // 4. SECURE FETCH
-    const response = await fetch('/api/checkout', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include', 
-      body: JSON.stringify({
-            auditId: auditIdToLock,
-            billedAmount: resultToLock?.totalBilled || 0,
-            expectedAmount: resultToLock?.totalExpected || 0,
-            analysisMarkdown: resultToLock?.markdown || "", 
-            patientName: resultToLock?.patientName || "",
-            reasoning: resultToLock?.reasoning || "Discrepancy detected",
-            email: currentUser.email 
-      }),
-    });
+  // 3. INTERNAL EXECUTION FUNCTION (Allows for an automatic retry)
+  const executeCheckout = async (retryCount = 0): Promise<void> => {
+    try {
+      const response = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', 
+        body: JSON.stringify({
+              auditId: auditIdToLock,
+              billedAmount: resultToLock?.totalBilled || 0,
+              expectedAmount: resultToLock?.totalExpected || 0,
+              analysisMarkdown: resultToLock?.markdown || "", 
+              patientName: resultToLock?.patientName || "",
+              reasoning: resultToLock?.reasoning || "Discrepancy detected",
+              email: currentUser.email 
+        }),
+      });
 
-    const data = await response.json();
+      const data = await response.json();
 
-    if (data.url) {
-      window.location.href = data.url;
-    } else {
+      if (data.url) {
+        window.location.href = data.url;
+      } else if (response.status === 401 && retryCount < 1) {
+        // RACE CONDITION FIX: If unauthorized, wait 1.5 seconds and try once more
+        console.log("Session not yet synced to server. Retrying...");
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        return executeCheckout(retryCount + 1);
+      } else {
+        setIsSubscribing(false);
+        setError(data.error || "Please sign in again.");
+      }
+    } catch (err) {
       setIsSubscribing(false);
-      console.error("CHECKOUT_ERROR:", data.error);
-      // If the server still says Unauthorized, it means the cookies aren't ready.
-      // We show a more helpful message than the default.
-      setError(data.error === "Unauthorized: Please log in again" 
-        ? "Verifying your session... please tap 'Start Subscription' once more." 
-        : data.error);
+      setError("Connection error. Please try again.");
     }
-  } catch (err) {
-    setIsSubscribing(false);
-    console.error("FETCH_CRASH:", err);
-    setError("Connection error. Please try again.");
-  }
+  };
+
+  await executeCheckout();
 };
 
 // Feature 1: IP Rate Limit inside handleAudit
