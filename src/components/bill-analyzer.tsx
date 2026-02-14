@@ -200,7 +200,7 @@ const handleUMSUnlock = async (passedUser?: any) => {
             // Ensure this property name matches what you use in your Webhook 
             // (likely analysisMarkdown or markdown)
             analysisMarkdown: resultToLock?.markdown || "", 
-            patientName: resultToLock?.patientName || "Valued Patient",
+            patientName: resultToLock?.patientName || "",
             reasoning: resultToLock?.reasoning || "Discrepancy detected"
       }),
     });

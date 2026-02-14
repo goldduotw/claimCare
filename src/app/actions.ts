@@ -38,7 +38,7 @@ export async function analyzeBill(input: any) {
       markdown: result.analysisMarkdown || (result as any).analysisTableMarkdown || "", 
       totalBilled: billed,
       totalExpected: expected,
-      patientName: result.patientName || "Valued Patient",
+      patientName: result.patientName || "",
       reasoning: result.logicTrace?.join(' ') || "Potential billing error detected"
     };
 

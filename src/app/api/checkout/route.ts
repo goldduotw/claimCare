@@ -51,7 +51,7 @@ export async function POST(req: Request) {
         suggestedAmount: String(body.expectedAmount || "0.00"), 
         // Stripe Limit: 500 chars. We truncate to 400 to be safe.
         analysisData: String(body.analysisMarkdown || "").substring(0, 400), 
-        patientName: String(body.patientName || "Valued Patient"),
+        patientName: String(body.patientName || ""),
         reasoning: String(body.reasoning || "Discrepancy detected").substring(0, 400)
       },
       success_url: `${process.env.NEXT_PUBLIC_SITE_URL}/audit/${body.auditId}?success=true`,

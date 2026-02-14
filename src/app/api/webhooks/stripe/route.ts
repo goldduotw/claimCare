@@ -62,7 +62,7 @@ export async function POST(req: Request) {
         billed_amount: parseFloat(pendingData.totalBilled || "0"),      
         expected_amount: parseFloat(pendingData.totalExpected || "0"), 
         analysis_table: pendingData.markdown,    
-        patient_name: pendingData.patientName || "Valued Patient",
+        patient_name: pendingData.patientName || "",
         reasoning: pendingData.reasoning || 'Medical billing discrepancy detected.'
       }, { onConflict: 'id' });
 
