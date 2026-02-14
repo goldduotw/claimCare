@@ -10,9 +10,13 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 
 export async function POST(req: Request) {
   try {
-    // 1. EXTRACT ALL DATA (Not just auditId)
-  //  const { auditId, totalAmount, suggestedAmount, analysisData } = await req.json();
-    const { auditId, billedAmount, expectedAmount, analysisMarkdown, patientName, reasoning } = await req.json();
+    const body = await req.json();
+    const { auditId, billedAmount, expectedAmount, analysisMarkdown, patientName, reasoning } = body;
+
+    // VERCEL FIX: Validate auditId immediately to avoid /audit/null
+    if (!auditId || auditId === 'null') {
+      return NextResponse.json({ error: "Missing Audit ID" }, { status: 400 });
+    }
 
     const cookieStore = await cookies();
     const supabase = createServerClient(
@@ -26,29 +30,35 @@ export async function POST(req: Request) {
               cookiesToSet.forEach(({ name, value, options }) =>
                 cookieStore.set(name, value, options)
               )
-            } catch (error) {}
+            } catch (error) {
+              // Vercel sometimes throws non-critical errors here during header mutations
+            }
           },
         },
       }
     );
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // Get user with improved error logging for Vercel dashboard
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    
+    if (authError || !user) {
+      console.error("SUPABASE AUTH ERROR:", authError?.message);
+      return NextResponse.json({ error: "Unauthorized: Please log in again" }, { status: 401 });
+    }
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       line_items: [{ price: STRIPE_PRICE_ID, quantity: 1 }],
       mode: 'subscription',
-      // 2. PACK THE SUITCASE: Add the medical bill data here
       metadata: {      
         userId: user.id,
         auditId: auditId,
-        // Wrap these in String() so Stripe doesn't drop them
         totalAmount: String(billedAmount || "0.00"),      
         suggestedAmount: String(expectedAmount || "0.00"), 
-        analysisData: String(analysisMarkdown || "").substring(0, 450), // Stripe limit is 500 chars
-        patientName: "",
-        reasoning: String(reasoning || "Discrepancy detected")
+        // Truncate analysisData to be safe (Stripe limit is 500 chars total)
+        analysisData: String(analysisMarkdown || "").substring(0, 400), 
+        patientName: String(patientName || "Valued Patient"), // FIXED: No longer ""
+        reasoning: String(reasoning || "Discrepancy detected").substring(0, 400)
       },
       success_url: `${process.env.NEXT_PUBLIC_SITE_URL}/audit/${auditId}?success=true`,
       cancel_url: `${process.env.NEXT_PUBLIC_SITE_URL}/audit/${auditId}?canceled=true`,
@@ -56,7 +66,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ url: session.url });
   } catch (err: any) {
-    console.error('Stripe Error:', err);
+    console.error('Stripe Route Error:', err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
