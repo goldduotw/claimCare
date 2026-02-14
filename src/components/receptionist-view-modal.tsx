@@ -151,8 +151,8 @@ export function ReceptionistViewModal({ isOpen, onClose, details, analysisTable,
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-4xl bg-white text-gray-900 max-h-[90vh] overflow-y-auto">
-<div className="flex-1 overflow-y-auto">        
+<DialogContent className="w-[95vw] sm:max-w-4xl bg-white text-gray-900 h-[90vh] md:h-auto overflow-hidden flex flex-col p-0">
+    <div className="flex-1 overflow-y-auto p-0">       
 
         {showConfetti && <Confetti recycle={false} numberOfPieces={500} />}
         <div className="relative">
