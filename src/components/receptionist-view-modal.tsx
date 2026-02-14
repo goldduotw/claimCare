@@ -156,38 +156,44 @@ export function ReceptionistViewModal({ isOpen, onClose, details, analysisTable,
 
         {showConfetti && <Confetti recycle={false} numberOfPieces={500} />}
         <div className="relative">
-            {/* Main Report Content */}
-            <div ref={modalContentRef} className={`p-8 transition-all duration-700 ${!isUnlocked ? 'blur-2xl pointer-events-none opacity-50' : 'blur-0 opacity-100'}`}>
+{/* Main Report Content */}
+            <div ref={modalContentRef} className={`p-4 md:p-8 transition-all duration-700 ${!isUnlocked ? 'blur-2xl pointer-events-none opacity-50' : 'blur-0 opacity-100'}`}>
                 <DialogHeader>
                     <DialogTitle className="text-xl font-bold text-center text-blue-900 uppercase tracking-tight">Patient Advocacy Report</DialogTitle>
                     <p className="text-center text-sm text-gray-500 font-medium">Verified for {details.patientName || "the Patient"}</p>
                 </DialogHeader>
 
                 <div className="my-6 border-4 border-dashed border-green-500 rounded-xl p-6 bg-green-50 text-center">
-                    <div className="flex justify-center gap-12">
+                    {/* UPDATED: flex-col for mobile, md:flex-row for desktop */}
+                    <div className="flex flex-col md:flex-row justify-center items-center gap-6 md:gap-12">
                         <div>
                             <p className="text-[10px] uppercase text-gray-400 font-bold">Fair Price</p>
-                            <p className="text-4xl font-black text-green-600">{details.expectedAmount}</p>
+                            <p className="text-3xl md:text-4xl font-black text-green-600">{details.expectedAmount}</p>
                         </div>
-                        <div className="border-r border-gray-200"></div>
+                        
+                        {/* Vertical line on desktop, horizontal on mobile */}
+                        <div className="hidden md:block border-r border-gray-200 h-12"></div>
+                        <div className="md:hidden border-t border-gray-200 w-full"></div>
+                        
                         <div>
                             <p className="text-[10px] uppercase text-gray-400 font-bold">Billed Amount</p>
-                            <p className="text-4xl font-black text-red-500">{details.billedAmount}</p>
+                            <p className="text-3xl md:text-4xl font-black text-red-500">{details.billedAmount}</p>
                         </div>
                     </div>
                 </div>
 
-                <div className="border rounded-xl overflow-hidden shadow-sm">
+                {/* UPDATED: Added overflow-x-auto so the table doesn't squish on phones */}
+                <div className="border rounded-xl overflow-hidden shadow-sm overflow-x-auto">
                     <Table>
                         <TableHeader className="bg-gray-50">
                             <TableRow>
-                                {headers.map((h, i) => <TableHead key={i} className="font-bold">{h}</TableHead>)}
+                                {headers.map((h, i) => <TableHead key={i} className="font-bold whitespace-nowrap">{h}</TableHead>)}
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {rows.map((row, ri) => (
                                 <TableRow key={ri}>
-                                    {row.map((c, ci) => <TableCell key={ci} className="py-4 text-sm font-medium">{c}</TableCell>)}
+                                    {row.map((c, ci) => <TableCell key={ci} className="py-4 text-sm font-medium whitespace-nowrap">{c}</TableCell>)}
                                 </TableRow>
                             ))}
                         </TableBody>
