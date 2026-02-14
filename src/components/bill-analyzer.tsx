@@ -92,9 +92,8 @@ export function BillAnalyzer({ initialData, isUnlocked: externalIsUnlocked }: Bi
   const router = useRouter();
   const [actualId, setActualId] = useState<string | null>(null);
   const params = useParams();
-  const auditId = params?.id as string;
-
-  const [billText, setBillText] = useState('');
+  //const auditId = params?.id as string;
+const [auditId, setAuditId] = useState<string | null>(params?.id || initialData?.id || null);  const [billText, setBillText] = useState('');
   const [imageData, setImageData] = useState<string | null>(null);
   const [insurancePdfData, setInsurancePdfData] = useState<string | null>(null);
   const [insurancePdfFile, setInsurancePdfFile] = useState<File | null>(null);
@@ -125,7 +124,10 @@ const [isSubscribing, setIsSubscribing] = useState(() => {
 
   const { toast } = useToast();
   const searchParams = useSearchParams();
-  const [currentAuditId, setCurrentAuditId] = useState<string | null>(null);
+ // const [currentAuditId, setCurrentAuditId] = useState<string | null>(null);
+  const [currentAuditId, setCurrentAuditId] = useState<string | null>(
+    (params?.id as string) || initialData?.id || null
+  );
 
 useEffect(() => {
   if (initialData) {
@@ -192,12 +194,14 @@ const handleUMSUnlock = async (passedUser?: any) => {
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include', 
       body: JSON.stringify({
-        auditId: auditIdToLock,
-        billedAmount: resultToLock?.totalBilled || 0,
-        expectedAmount: resultToLock?.totalExpected || 0,
-        analysisMarkdown: resultToLock?.markdown || "",
-        patientName: resultToLock?.patientName || "Valued Patient",
-        reasoning: resultToLock?.reasoning || "Discrepancy detected"
+            auditId: auditIdToLock,
+            billedAmount: resultToLock?.totalBilled || 0,
+            expectedAmount: resultToLock?.totalExpected || 0,
+            // Ensure this property name matches what you use in your Webhook 
+            // (likely analysisMarkdown or markdown)
+            analysisMarkdown: resultToLock?.markdown || "", 
+            patientName: resultToLock?.patientName || "Valued Patient",
+            reasoning: resultToLock?.reasoning || "Discrepancy detected"
       }),
     });
 
@@ -241,7 +245,7 @@ const handleAudit = async (event: React.FormEvent<HTMLFormElement>) => {
     const result = await analyzeBill(analysisInput);
 
     if (result.success) {
-      // --- NEW: GENERATE TEMPORARY ID ---
+      /*
       const tempId = crypto.randomUUID();
       
       const newAnalysis = {
@@ -261,6 +265,25 @@ const handleAudit = async (event: React.FormEvent<HTMLFormElement>) => {
       localStorage.setItem('pending_audit_id', tempId);
 
       console.log("AUDIT GENERATED: ID set to", tempId);
+      */
+     // Use the ID from Redis (actions.ts) instead of generating a local one
+      const realAuditId = result.auditId; 
+      
+      const newAnalysis = {
+        markdown: result.data.analysisMarkdown || '',
+        totalBilled: result.totalBilled,
+        totalExpected: result.totalExpected,
+        reasoning: result.reasoning,
+        patientName: result.patientName || "" 
+      };
+
+      // Update state with the Redis-linked ID
+      setAnalysisResult(newAnalysis);
+      setCurrentAuditId(realAuditId); 
+
+      // Update backup
+      localStorage.setItem('pending_audit', JSON.stringify(newAnalysis));
+      localStorage.setItem('pending_audit_id', realAuditId);
     } else {
       setError(result.error || "An error occurred.");
     }
