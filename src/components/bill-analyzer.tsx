@@ -168,8 +168,15 @@ const handleVFDClick = () => {
 // Inside your BillAnalyzer component, replace handleUMSUnlock with this:
 
 const handleUMSUnlock = async (passedUser?: any) => {
+  // 1. LOCK DATA: Grab state immediately
   const auditIdToLock = currentAuditId;
   const resultToLock = analysisResult;
+
+  // 2. PRE-FLIGHT CHECK: Log the payload
+  console.log("--- STRIPE PAYLOAD CHECK ---", {
+    auditId: auditIdToLock,
+    patient: resultToLock?.patientName
+  });
 
   if (!auditIdToLock || auditIdToLock === 'null') {
     setError("Could not link this payment to your audit. Please try again.");
@@ -179,10 +186,11 @@ const handleUMSUnlock = async (passedUser?: any) => {
   setIsSubscribing(true);
 
   try {
+    // 3. SECURE FETCH: 'credentials' is mandatory for Vercel Auth
     const response = await fetch('/api/checkout', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      credentials: 'include', // <--- CRITICAL: This sends your session cookies to Vercel
+      credentials: 'include', 
       body: JSON.stringify({
         auditId: auditIdToLock,
         billedAmount: resultToLock?.totalBilled || 0,
@@ -194,14 +202,17 @@ const handleUMSUnlock = async (passedUser?: any) => {
     });
 
     const data = await response.json();
+
     if (data.url) {
       window.location.href = data.url;
     } else {
       setIsSubscribing(false);
-      setError(data.error || "Please log in again.");
+      console.error("CHECKOUT_ERROR:", data.error);
+      setError(data.error || "Please sign in again.");
     }
   } catch (err) {
     setIsSubscribing(false);
+    console.error("FETCH_CRASH:", err);
     setError("Connection error. Please try again.");
   }
 };

@@ -30,14 +30,15 @@ export async function POST(req: Request) {
       }
     );
 
-    // Use getSession() as a fallback for getUser() on high-latency Vercel starts
-    const { data: { session } } = await supabase.auth.getSession();
-    const user = session?.user;
+    // VERCEL HARDENING: Use getSession first, then getUser for security
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
     
-    if (!user) {
-      console.error("SUPABASE AUTH ERROR: No session found in cookies.");
+    if (sessionError || !session?.user) {
+      console.error("DEBUG - AUTH FAILURE:", sessionError?.message || "No session in cookies");
       return NextResponse.json({ error: "Unauthorized: Please log in again" }, { status: 401 });
     }
+
+    const user = session.user;
 
     const stripeSession = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
@@ -48,6 +49,7 @@ export async function POST(req: Request) {
         auditId: body.auditId,
         totalAmount: String(body.billedAmount || "0.00"),      
         suggestedAmount: String(body.expectedAmount || "0.00"), 
+        // Stripe Limit: 500 chars. We truncate to 400 to be safe.
         analysisData: String(body.analysisMarkdown || "").substring(0, 400), 
         patientName: String(body.patientName || "Valued Patient"),
         reasoning: String(body.reasoning || "Discrepancy detected").substring(0, 400)
@@ -58,6 +60,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ url: stripeSession.url });
   } catch (err: any) {
+    console.error('SERVER_CRASH:', err.message);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
