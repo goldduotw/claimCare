@@ -170,14 +170,39 @@ const handleVFDClick = () => {
 // Inside your BillAnalyzer component, replace handleUMSUnlock with this:
 
 const handleUMSUnlock = async (passedUser?: any) => {
-  // 1. LOCK DATA: Grab state immediately
+  // 1. AUTH HANDSHAKE: Ensure we have a valid session
+  const { data: { session } } = await supabase.auth.getSession();
+
+  // Check both the live session AND the passedUser from the useEffect
+  const currentUser = session?.user || passedUser;
+
+  if (!currentUser) {
+    console.log("No session found. Saving state and triggering Google Login...");
+    
+    // BACKUP: Save current progress so it's there when we return
+    localStorage.setItem('pending_audit', JSON.stringify(analysisResult));
+    localStorage.setItem('pending_audit_id', currentAuditId);
+
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { 
+        // SMART REDIRECT: Add the flag so the useEffect knows to finish the job
+        redirectTo: `${window.location.origin}${window.location.pathname}?triggerCheckout=true`,
+        queryParams: { prompt: 'select_account' } 
+      }
+    });
+    return; 
+  }
+
+  // 2. LOCK DATA: Grab state immediately
   const auditIdToLock = currentAuditId;
   const resultToLock = analysisResult;
 
-  // 2. PRE-FLIGHT CHECK: Log the payload
+  // 3. PRE-FLIGHT CHECK: Log the payload
   console.log("--- STRIPE PAYLOAD CHECK ---", {
     auditId: auditIdToLock,
-    patient: resultToLock?.patientName
+    patient: resultToLock?.patientName,
+    userEmail: currentUser.email 
   });
 
   if (!auditIdToLock || auditIdToLock === 'null') {
@@ -186,9 +211,10 @@ const handleUMSUnlock = async (passedUser?: any) => {
   }
 
   setIsSubscribing(true);
+  setError(null); // Clear any old "Unauthorized" ghosts before starting
 
   try {
-    // 3. SECURE FETCH: 'credentials' is mandatory for Vercel Auth
+    // 4. SECURE FETCH
     const response = await fetch('/api/checkout', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -197,11 +223,10 @@ const handleUMSUnlock = async (passedUser?: any) => {
             auditId: auditIdToLock,
             billedAmount: resultToLock?.totalBilled || 0,
             expectedAmount: resultToLock?.totalExpected || 0,
-            // Ensure this property name matches what you use in your Webhook 
-            // (likely analysisMarkdown or markdown)
             analysisMarkdown: resultToLock?.markdown || "", 
             patientName: resultToLock?.patientName || "",
-            reasoning: resultToLock?.reasoning || "Discrepancy detected"
+            reasoning: resultToLock?.reasoning || "Discrepancy detected",
+            email: currentUser.email 
       }),
     });
 
@@ -212,7 +237,11 @@ const handleUMSUnlock = async (passedUser?: any) => {
     } else {
       setIsSubscribing(false);
       console.error("CHECKOUT_ERROR:", data.error);
-      setError(data.error || "Please sign in again.");
+      // If the server still says Unauthorized, it means the cookies aren't ready.
+      // We show a more helpful message than the default.
+      setError(data.error === "Unauthorized: Please log in again" 
+        ? "Verifying your session... please tap 'Start Subscription' once more." 
+        : data.error);
     }
   } catch (err) {
     setIsSubscribing(false);
