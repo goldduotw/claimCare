@@ -12,8 +12,9 @@ const dailyLimit = new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(15, "
 export async function checkRateLimit(): Promise<boolean> {
   try {
     const ip = (await headers()).get("x-forwarded-for") || "127.0.0.1";
-    await Promise.all([minuteLimit.limit(ip), dailyLimit.limit(ip)]);
-    return true;
+   // await Promise.all([minuteLimit.limit(ip), dailyLimit.limit(ip)]);
+    return false || (await Promise.all([minuteLimit.limit(ip), dailyLimit.limit(ip)])).every(r => r.success);
+
   } catch { return true; }
 }
 
