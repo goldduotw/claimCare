@@ -163,21 +163,23 @@ export function ReceptionistViewModal({ isOpen, onClose, details, analysisTable,
                     <p className="text-center text-sm text-gray-500 font-medium">Verified for {details.patientName || "the Patient"}</p>
                 </DialogHeader>
 
-                <div className="my-6 border-4 border-dashed border-green-500 rounded-xl p-6 bg-green-50 text-center">
-                    {/* UPDATED: flex-col for mobile, md:flex-row for desktop */}
-                    <div className="flex flex-col md:flex-row justify-center items-center gap-6 md:gap-12">
-                        <div>
+                <div className="my-6 border-4 border-dashed border-green-500 rounded-xl p-4 bg-green-50 text-center w-full max-w-full overflow-hidden">
+                    {/* Simplified stacking logic */}
+                    <div className="flex flex-col md:flex-row justify-center items-center">
+                        <div className="py-2">
                             <p className="text-[10px] uppercase text-gray-400 font-bold">Fair Price</p>
-                            <p className="text-3xl md:text-4xl font-black text-green-600">{details.expectedAmount}</p>
+                            <p className="text-3xl md:text-4xl font-black text-green-600 leading-none">{details.expectedAmount}</p>
                         </div>
                         
-                        {/* Vertical line on desktop, horizontal on mobile */}
-                        <div className="hidden md:block border-r border-gray-200 h-12"></div>
-                        <div className="md:hidden border-t border-gray-200 w-full"></div>
+                        {/* Divider: Only shows on desktop */}
+                        <div className="hidden md:block border-r border-gray-200 h-12 mx-8"></div>
                         
-                        <div>
+                        {/* Mobile Divider: Only shows on phone */}
+                        <div className="w-16 border-t border-gray-200 my-4 md:hidden"></div>
+                        
+                        <div className="py-2">
                             <p className="text-[10px] uppercase text-gray-400 font-bold">Billed Amount</p>
-                            <p className="text-3xl md:text-4xl font-black text-red-500">{details.billedAmount}</p>
+                            <p className="text-3xl md:text-4xl font-black text-red-500 leading-none">{details.billedAmount}</p>
                         </div>
                     </div>
                 </div>

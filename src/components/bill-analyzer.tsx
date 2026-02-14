@@ -819,9 +819,13 @@ return (
     {/* STAGE 3: THE ANALYSIS PULSE
         Visible only during the initial AI processing.
     */}
-    {isPending && !isSubscribing && (
+{isPending && !isSubscribing && (
       <Card>
-        <CardHeader><CardTitle>Analyzing...</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-1 animate-dots">
+            Analyzing<span>.</span><span>.</span><span>.</span>
+          </CardTitle>
+        </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <div className="h-4 bg-muted rounded w-3/4 animate-pulse"></div>
