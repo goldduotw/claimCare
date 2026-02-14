@@ -170,8 +170,9 @@ const handleVFDClick = () => {
 // Inside your BillAnalyzer component, replace handleUMSUnlock with this:
 
 const handleUMSUnlock = async (passedUser?: any) => {
-  // 1. AUTH HANDSHAKE: Get session
-  const { data: { session } } = await supabase.auth.getSession();
+  // 1. REFRESH & SYNC: Force cookies to update before we do anything
+  // This is the "secret sauce" for fixing the 401 on mobile redirects.
+  const { data: { session }, error: refreshError } = await supabase.auth.refreshSession();
   const currentUser = session?.user || passedUser;
 
   if (!currentUser) {
@@ -189,7 +190,7 @@ const handleUMSUnlock = async (passedUser?: any) => {
     return; 
   }
 
-  // 2. LOCK DATA: Grab state immediately (Preserved your logic)
+  // 2. LOCK DATA: (Your original logic preserved)
   const auditIdToLock = currentAuditId;
   const resultToLock = analysisResult;
 
@@ -199,14 +200,14 @@ const handleUMSUnlock = async (passedUser?: any) => {
   }
 
   setIsSubscribing(true);
-  setError(null); // Clear previous error state
+  setError(null); 
 
-  // 3. THE EXECUTION (Preserved your exact Fetch logic)
   try {
-    let response = await fetch('/api/checkout', {
+    // 3. THE FETCH (Your original logic preserved)
+    const response = await fetch('/api/checkout', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      credentials: 'include', 
+      credentials: 'include', // Crucial for sending the cookies we just refreshed
       body: JSON.stringify({
             auditId: auditIdToLock,
             billedAmount: resultToLock?.totalBilled || 0,
@@ -218,27 +219,6 @@ const handleUMSUnlock = async (passedUser?: any) => {
       }),
     });
 
-    // 4. THE SYNC FIX: If the server says Unauthorized, don't show the error yet.
-    // Wait 1.5s for cookies to sync and try ONE more time silently.
-    if (response.status === 401) {
-      console.log("Cookie sync gap detected. Retrying once...");
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      response = await fetch('/api/checkout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          auditId: auditIdToLock,
-          billedAmount: resultToLock?.totalBilled || 0,
-          expectedAmount: resultToLock?.totalExpected || 0,
-          analysisMarkdown: resultToLock?.markdown || "",
-          patientName: resultToLock?.patientName || "",
-          reasoning: resultToLock?.reasoning || "Discrepancy detected",
-          email: currentUser.email
-        }),
-      });
-    }
-
     const data = await response.json();
 
     if (data.url) {
@@ -246,7 +226,12 @@ const handleUMSUnlock = async (passedUser?: any) => {
     } else {
       setIsSubscribing(false);
       console.error("CHECKOUT_ERROR:", data.error);
-      setError(data.error || "Session expired. Please sign in again.");
+      // GENTLE ERROR: If it's STILL unauthorized, we provide a logout fix
+      if (data.error?.includes("Unauthorized")) {
+        setError("Session sync issue. Please try clicking once more or refresh the page.");
+      } else {
+        setError(data.error || "Please sign in again.");
+      }
     }
   } catch (err) {
     setIsSubscribing(false);
