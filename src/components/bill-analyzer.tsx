@@ -573,50 +573,64 @@ ${analysisResult.patientName}
           )}
         </div>
 
-        {!isUnlockedReport ? (
-          /* LOCKED VIEW (REMAINS THE SAME) */
-          <div className="relative space-y-6">
-            <Alert variant="destructive" className={`bg-red-50 border-red-200 p-8 rounded-2xl ${showPaywall ? "blur-md pointer-events-none opacity-60" : ""}`}>
-              <div className="flex items-center justify-between gap-6">
-                <div className="flex items-center gap-4">
-                  <div className="bg-red-100 p-3 rounded-full"><AlertCircle className="h-8 w-8 text-red-600" /></div>
-                  <div>
-                    <div className="text-red-700 font-semibold text-xl mb-3">
+{!isUnlockedReport ? (
+          /* LOCKED VIEW - FIXED FOR PORTRAIT */
+          <div className="relative space-y-6 w-full max-w-full overflow-hidden">
+            <Alert variant="destructive" className={`bg-red-50 border-red-200 p-4 md:p-8 rounded-2xl ${showPaywall ? "blur-md pointer-events-none opacity-60" : ""}`}>
+              {/* Changed to flex-col for mobile, md:flex-row for desktop */}
+              <div className="flex flex-col md:flex-row items-center justify-between gap-4 md:gap-6">
+                <div className="flex flex-col md:flex-row items-center gap-4 w-full text-center md:text-left">
+                  <div className="bg-red-100 p-3 rounded-full hidden md:block">
+                    <AlertCircle className="h-8 w-8 text-red-600" />
+                  </div>
+                  
+                  <div className="w-full">
+                    {/* Prices: Stacked on mobile to prevent horizontal overflow */}
+                    <div className="text-red-700 font-semibold text-lg md:text-xl mb-3 flex flex-col md:flex-row justify-center md:justify-start items-center gap-2 md:gap-6">
                       <span>Billed: ${analysisResult.totalBilled?.toFixed(2)}</span>
-                      <span className="text-green-700 font-bold ml-6">Fair Price: ${analysisResult.totalExpected?.toFixed(2)}</span>
+                      <span className="hidden md:inline text-slate-300">|</span>
+                      <span className="text-green-700 font-bold">Fair Price: ${analysisResult.totalExpected?.toFixed(2)}</span>
                     </div>
-                    <p className="text-red-800/80 italic text-sm line-clamp-2 max-w-xl">
+                    
+                    {/* Reasoning: Limited width for portrait */}
+                    <p className="text-red-800/80 italic text-xs md:text-sm line-clamp-2 max-w-full md:max-w-xl mx-auto md:mx-0">
                       <strong>Preliminary Findings:</strong> {analysisResult.reasoning}
                     </p>
                   </div>
                 </div>
+
                 {!showPaywall && (
-                  <Button onClick={() => handleVFDClick()} className="bg-red-600 hover:bg-red-700 text-white font-bold px-10 py-7 h-auto text-lg shadow-xl cursor-pointer">
+                  /* Button: Full width on mobile, auto width on desktop */
+                  <Button 
+                    onClick={() => handleVFDClick()} 
+                    className="bg-red-600 hover:bg-red-700 text-white font-bold w-full md:w-auto px-6 md:px-10 py-4 md:py-7 h-auto text-sm md:text-lg shadow-xl cursor-pointer"
+                  >
                     Verify with Front Desk
                   </Button>
                 )}
               </div>
             </Alert>
-{showPaywall && (
-  <div className="absolute inset-0 z-10 flex items-center justify-center animate-in zoom-in-95 duration-300">
-    <Button 
-      onClick={handleUMSUnlock} 
-      disabled={isSubscribing}
-      className={`${
-        isSubscribing ? 'bg-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
-      } text-white font-black px-12 py-8 h-auto text-xl shadow-2xl transition-all`}
-    >
-      {isSubscribing ? (
-        <div className="flex items-center gap-3">
-          <Loader2 className="h-6 w-6 animate-spin" />
-          Connecting...
-        </div>
-      ) : (
-        'Start Subscription ($3.99/mo)'
-      )}
-    </Button>
-  </div>
-)}
+
+            {showPaywall && (
+              <div className="absolute inset-0 z-10 flex items-center justify-center animate-in zoom-in-95 duration-300 px-4">
+                <Button 
+                  onClick={handleUMSUnlock} 
+                  disabled={isSubscribing}
+                  className={`${
+                    isSubscribing ? 'bg-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
+                  } text-white font-black w-full max-w-[280px] md:max-w-none px-12 py-6 md:py-8 h-auto text-lg md:text-xl shadow-2xl transition-all`}
+                >
+                  {isSubscribing ? (
+                    <div className="flex items-center gap-3">
+                      <Loader2 className="h-6 w-6 animate-spin" />
+                      Connecting...
+                    </div>
+                  ) : (
+                    'Start Subscription ($3.99/mo)'
+                  )}
+                </Button>
+              </div>
+            )}
           </div>
         ) : (
           /* UNLOCKED VIEW */
