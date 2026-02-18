@@ -169,15 +169,16 @@ const handleVFDClick = () => {
 // Feature 3: Deferred Write - Hits Supabase ONLY on Unlock
 // Inside your BillAnalyzer component, replace handleUMSUnlock with this:
 
+// ... (inside BillAnalyzer component)
+
 const handleUMSUnlock = async (passedUser?: any) => {
-  // 1. FORCED SYNC: Tell the phone to write the cookies immediately
+  // 1. FORCED SYNC: Update cookies for mobile browsers
   const { data: { session } } = await supabase.auth.refreshSession();
   const currentUser = session?.user || passedUser;
 
   if (!currentUser) {
-    // Save state so we don't lose the bill data during the Google jump
     localStorage.setItem('pending_audit', JSON.stringify(analysisResult));
-    localStorage.setItem('pending_audit_id', currentAuditId);
+    localStorage.setItem('pending_audit_id', currentAuditId || "");
 
     await supabase.auth.signInWithOAuth({
       provider: 'google',
@@ -189,19 +190,18 @@ const handleUMSUnlock = async (passedUser?: any) => {
     return; 
   }
 
-  // 2. DATA LOCK: (Your original 20 lines of logic preserved)
   const auditIdToLock = currentAuditId;
   const resultToLock = analysisResult;
 
   if (!auditIdToLock || auditIdToLock === 'null') {
-    setError("Could not link this payment to your audit. Please try again.");
+    setError("Could not link this payment to your audit.");
     return;
   }
 
   setIsSubscribing(true);
   setError(null); 
 
-  // 3. THE "SILENT ENGINE": This pushes through to the Pay Screen
+  // 2. THE SILENT ENGINE: Retries 401s automatically
   const openStripe = async (attempts = 3) => {
     try {
       const response = await fetch('/api/checkout', {
@@ -222,20 +222,18 @@ const handleUMSUnlock = async (passedUser?: any) => {
       const data = await response.json();
 
       if (data.url) {
-        // SUCCESS: Straight to the pay screen
         window.location.href = data.url;
       } else if (response.status === 401 && attempts > 0) {
-        // COOKIE DELAY: The phone hasn't finished saving the login yet.
-        // Wait 800ms and try again automatically. User just sees the spinner.
-        await new Promise(r => setTimeout(r, 800));
+        // Wait 1s for mobile cookie sync and retry
+        await new Promise(r => setTimeout(r, 1000));
         return openStripe(attempts - 1);
       } else {
         setIsSubscribing(false);
-        setError(data.error || "Please sign in again.");
+        setError(data.error || "Session issue. Please try signing in again.");
       }
     } catch (err) {
       if (attempts > 0) {
-        await new Promise(r => setTimeout(r, 800));
+        await new Promise(r => setTimeout(r, 1000));
         return openStripe(attempts - 1);
       }
       setIsSubscribing(false);

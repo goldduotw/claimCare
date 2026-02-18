@@ -15,22 +15,37 @@ export default function AuditPage() {
   const [data, setData] = useState<any>(null);
   const [retryCount, setRetryCount] = useState(0);
 
-  const fetchAudit = useCallback(async () => {
-    if (!id) return;
+const fetchAudit = useCallback(async () => {
+  if (!id) return;
 
-    const { data: auditData, error } = await supabase
-      .from('audits')
-      .select('*')
-      .eq('id', id)
-      .single();
+  // We attempt to fetch the audit
+  const { data: auditData, error } = await supabase
+    .from('audits')
+    .select('*')
+    .eq('id', id)
+    .single();
 
-    if (auditData) {
-      setData(auditData);
-      setLoading(false);
-      return true;
+  if (error) {
+    // This is the "Muzzle" for your phone
+    const isAuthError = error.code === 'PGRST301' || error.message?.includes("Unauthorized");
+    
+    if (isAuthError) {
+      // If we are unauthorized, it just means we are a Guest.
+      // We don't stop; we just let the app continue as a guest.
+      console.log("Guest view detected in page.tsx");
+      setLoading(false); 
+      return false; 
     }
-    return false;
-  }, [id]);
+    console.error("Fetch error:", error.message);
+  }
+
+  if (auditData) {
+    setData(auditData);
+    setLoading(false);
+    return true;
+  }
+  return false;
+}, [id]);
 
   useEffect(() => {
     // Initial fetch
