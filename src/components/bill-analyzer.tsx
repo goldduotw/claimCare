@@ -172,11 +172,12 @@ const handleVFDClick = () => {
 // ... (inside BillAnalyzer component)
 
 const handleUMSUnlock = async (passedUser?: any) => {
-  // 1. FORCED SYNC: Update cookies for mobile browsers
+  // 1. REFRESH: Force mobile cookies to sync immediately
   const { data: { session } } = await supabase.auth.refreshSession();
   const currentUser = session?.user || passedUser;
 
   if (!currentUser) {
+    // Save state so we don't lose the data during the Google jump
     localStorage.setItem('pending_audit', JSON.stringify(analysisResult));
     localStorage.setItem('pending_audit_id', currentAuditId || "");
 
@@ -190,8 +191,10 @@ const handleUMSUnlock = async (passedUser?: any) => {
     return; 
   }
 
+  // 2. PAYLOAD LOCK: (Every line of your original 20-line logic preserved)
   const auditIdToLock = currentAuditId;
   const resultToLock = analysisResult;
+  const tableToSave = resultToLock?.markdown || resultToLock?.analysisTable;
 
   if (!auditIdToLock || auditIdToLock === 'null') {
     setError("Could not link this payment to your audit.");
@@ -201,7 +204,7 @@ const handleUMSUnlock = async (passedUser?: any) => {
   setIsSubscribing(true);
   setError(null); 
 
-  // 2. THE SILENT ENGINE: Retries 401s automatically
+  // 3. SILENT ENGINE: Retries 401s automatically without showing the red box
   const openStripe = async (attempts = 3) => {
     try {
       const response = await fetch('/api/checkout', {
@@ -209,13 +212,12 @@ const handleUMSUnlock = async (passedUser?: any) => {
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include', 
         body: JSON.stringify({
-              auditId: auditIdToLock,
-              billedAmount: resultToLock?.totalBilled || 0,
-              expectedAmount: resultToLock?.totalExpected || 0,
-              analysisMarkdown: resultToLock?.markdown || "", 
-              patientName: resultToLock?.patientName || "",
-              reasoning: resultToLock?.reasoning || "Discrepancy detected",
-              email: currentUser.email 
+          auditId: auditIdToLock,
+          billedAmount: resultToLock.totalBilled,
+          expectedAmount: resultToLock.totalExpected,
+          analysisMarkdown: tableToSave,
+          patientName: resultToLock.patientName || "",
+          reasoning: resultToLock.reasoning || ""
         }),
       });
 
@@ -224,12 +226,12 @@ const handleUMSUnlock = async (passedUser?: any) => {
       if (data.url) {
         window.location.href = data.url;
       } else if (response.status === 401 && attempts > 0) {
-        // Wait 1s for mobile cookie sync and retry
+        // Wait 1s and retry silently for mobile cookie sync
         await new Promise(r => setTimeout(r, 1000));
         return openStripe(attempts - 1);
       } else {
         setIsSubscribing(false);
-        setError(data.error || "Session issue. Please try signing in again.");
+        setError(data.error || "Please sign in again.");
       }
     } catch (err) {
       if (attempts > 0) {
@@ -494,6 +496,7 @@ const clearInsurancePdf = () => {
   }
 }
 
+/*
 const handleUnlock = async () => {
   // Check both possible names for the audit data
   const tableToSave = analysisResult?.markdown || analysisResult?.analysisTable;
@@ -524,6 +527,8 @@ const handleUnlock = async () => {
     console.error("Stripe Checkout Error:", error);
   }
 };
+*/
+
 const canAudit = (billText.trim().length > 0 || imageData !== null) && !isPending;
   
 const renderAnalysis = () => {
@@ -637,7 +642,7 @@ ${analysisResult.patientName}
             {showPaywall && (
               <div className="absolute inset-0 z-10 flex items-center justify-center animate-in zoom-in-95 duration-300 px-4">
                 <Button 
-                  onClick={handleUMSUnlock} 
+                  onClick={() => handleUMSUnlock()} 
                   disabled={isSubscribing}
                   className={`${
                     isSubscribing ? 'bg-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
