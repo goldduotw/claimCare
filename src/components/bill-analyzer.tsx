@@ -372,8 +372,10 @@ const fetchAudit = async (id: string) => {
 useEffect(() => {
   const params = new URLSearchParams(window.location.search);
   const shouldCheckout = params.get('triggerCheckout');
+  
+  // 1. GRAB BACKUPS: Get the data we saved before the Google Jump
   const savedData = localStorage.getItem('pending_audit');
-  const savedId = localStorage.getItem('pending_audit_id'); // Get the backup ID
+  const savedId = localStorage.getItem('pending_audit_id'); 
 
   const handleReturnFlow = async () => {
     if (shouldCheckout === 'true') {
@@ -381,25 +383,31 @@ useEffect(() => {
       
       const { data: { user } } = await supabase.auth.getUser();
       
+      // 2. RESTORE STATE: Put the ID and Result back into React state
       if (user && savedData && savedId) {
-        const data = JSON.parse(savedData);
-        setAnalysisResult(data);
-        setCurrentAuditId(savedId); // Restore the ID
+        const parsedData = JSON.parse(savedData);
         
+        // This is the missing link—we must set these BEFORE calling handleUMSUnlock
+        setAnalysisResult(parsedData);
+        setCurrentAuditId(savedId); 
+        
+        // 3. CLEAN URL: Remove the trigger so it doesn't loop
         const newUrl = new URL(window.location.href);
         newUrl.searchParams.delete('triggerCheckout');
         window.history.replaceState({}, '', newUrl.toString());
 
-        // Now handleUMSUnlock will have the correct 'auditIdToLock'
+        // 4. EXECUTE: Pass the user directly to the function
         handleUMSUnlock(user);
         return; 
+      } else {
+        console.error("Return Flow Error: Missing saved data or user.");
+        setIsSubscribing(false);
       }
     }
-    setIsSubscribing(false); 
   };
 
   handleReturnFlow();
-}, [initialData]);
+}, [initialData]); // Runs when the page loads
 
 const uploadBill = async (dataUrl: string): Promise<string> => {
   return dataUrl; 
