@@ -787,109 +787,116 @@ return (
           </CardDescription>
         </CardHeader>
         <CardContent>
-/* 1. Page-level wrapper to catch any drop as a Bill */
-<div 
-  className="min-h-screen"
-  onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; }} 
-  onDrop={(e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const file = e.dataTransfer.files[0];
-    if (!file) return;
-
-    if (file.type.startsWith('image/')) {
-      const reader = new FileReader();
-      reader.onload = (event) => setImageData(event.target?.result as string);
-      reader.readAsDataURL(file);
-    } else if (file.type === 'application/pdf') {
-      // Any drop on the page that isn't the tiny insurance box becomes the Bill
-      setBillText(`Medical Bill: ${file.name}`);
-    }
-  }}
->
-  <form onSubmit={handleAudit} className="space-y-4">
-    <div className="space-y-4">
-      <div>
-        <h3 className="font-semibold mb-2 text-slate-900">Medical Bill</h3>
-        {imageData ? (
-          <div className="relative">
-            <img src={imageData} alt="Medical bill preview" className="rounded-md max-h-60 w-auto" />
-            <Button type="button" variant="ghost" size="icon" className="absolute top-2 right-2 bg-background/50 hover:bg-background/80" onClick={clearImage}>
+<form onSubmit={handleAudit} className="space-y-4">
+  <div className="space-y-4">
+    <div 
+      /* This wrapper catches drops around the title and camera button */
+      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+      onDrop={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const file = e.dataTransfer.files[0];
+        if (file) {
+          if (file.type.startsWith('image/')) {
+            const reader = new FileReader();
+            reader.onload = (event) => setImageData(event.target?.result as string);
+            reader.readAsDataURL(file);
+          } else {
+            setBillText(`Medical Bill: ${file.name}`);
+          }
+        }
+      }}
+    >
+      <h3 className="font-semibold mb-2 text-slate-900">Medical Bill</h3>
+      {imageData ? (
+        <div className="relative">
+          <img src={imageData} alt="Medical bill preview" className="rounded-md max-h-60 w-auto" />
+          <Button type="button" variant="ghost" size="icon" className="absolute top-2 right-2 bg-background/50 hover:bg-background/80" onClick={clearImage}>
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      ) : (
+        <Textarea
+          placeholder="Paste your bill text here, or drag a file anywhere..."
+          className="min-h-[200px] resize-y"
+          value={billText}
+          /* This specific handler stops the 'New Tab' bug when dropping on the box itself */
+          onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+          onDrop={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const file = e.dataTransfer.files[0];
+            if (file) setBillText(`Medical Bill: ${file.name}`);
+          }}
+          onChange={(e) => setBillText(e.target.value)}
+          disabled={isPending}
+        />
+      )}
+      <input
+        type="file"
+        accept="image/*,application/pdf"
+        ref={billFileInputRef}
+        onChange={handleBillFileChange}
+        className="hidden"
+      />
+      <Button type="button" variant="outline" className="mt-2" onClick={() => billFileInputRef.current?.click()}>
+        <Camera className="mr-2 h-4 w-4" />
+        Camera / Upload
+      </Button>
+    </div>
+   
+    {showInsuranceUpload && (
+      <div className="space-y-2 pt-4 border-t">
+        <h3 className="font-semibold text-slate-900 text-sm">Insurance Summary (Optional)</h3>
+        {insurancePdfFile ? (
+          <div className="relative flex items-center gap-2 rounded-md border p-4 bg-blue-50">
+            <FileText className="h-6 w-6 text-blue-600" />
+            <span className="text-sm font-medium truncate">{insurancePdfFile.name}</span>
+            <Button type="button" variant="ghost" size="icon" className="absolute top-1/2 right-2 -translate-y-1/2" onClick={clearInsurancePdf}>
               <X className="h-4 w-4" />
             </Button>
           </div>
         ) : (
-          <Textarea
-            placeholder="Paste your bill text here, or drag a file anywhere..."
-            className="min-h-[200px] resize-y"
-            value={billText}
-            onChange={(e) => setBillText(e.target.value)}
-            disabled={isPending}
-          />
-        )}
-        <input
-          type="file"
-          accept="image/*,application/pdf"
-          ref={billFileInputRef}
-          onChange={handleBillFileChange}
-          className="hidden"
-        />
-        <Button type="button" variant="outline" className="mt-2 hover:bg-slate-900 hover:text-white" onClick={() => billFileInputRef.current?.click()}>
-          <Camera className="mr-2 h-4 w-4" />
-          Camera / Upload
-        </Button>
-      </div>
-     
-      {showInsuranceUpload && (
-        <div className="space-y-2 pt-4 border-t">
-          {/* 2. Tiny, specific drop zone for Insurance only */}
           <div 
-            className={`p-2 rounded-md border-2 border-dashed transition-colors ${insurancePdfFile ? 'bg-blue-50 border-blue-400' : 'bg-slate-50 border-slate-200'}`}
+            className="flex items-center justify-center w-full h-24 border-2 border-dashed rounded-lg bg-muted/50 hover:bg-muted"
+            /* Dedicated drop zone for insurance ONLY */
             onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
             onDrop={(e) => {
               e.preventDefault();
-              e.stopPropagation(); // Stops it from becoming a 'Bill'
+              e.stopPropagation();
               const file = e.dataTransfer.files[0];
               if (file && file.type === 'application/pdf') {
                 setInsurancePdfFile(file);
               }
             }}
           >
-            <h3 className="text-sm font-semibold text-slate-900">Insurance Summary (Optional)</h3>
-            {insurancePdfFile ? (
-              <div className="flex items-center gap-2 mt-1">
-                <FileText className="h-4 w-4 text-blue-600" />
-                <span className="text-xs truncate">{insurancePdfFile.name}</span>
-                <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={clearInsurancePdf}><X className="h-3 w-3" /></Button>
-              </div>
-            ) : (
-              <p className="text-[10px] text-slate-400">Drop insurance PDF here</p>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-
-    <div className="flex flex-col gap-4 pt-4 border-t">
-      {!showInsuranceUpload && (
-        <Button type="button" variant="link" className="text-muted-foreground p-0 h-auto justify-start" onClick={() => setShowInsuranceUpload(true)}>
-          <PlusCircle className="mr-2 h-4 w-4" />
-          Verify with Insurance Plan
-        </Button>
-      )}
-      <div className="flex gap-2 flex-wrap">
-        <Button 
-          type="submit" 
-          size="lg" 
-          disabled={!canAudit} 
-          className="bg-blue-600 text-white hover:bg-blue-700"
-        >
-          {isPending ? "Auditing..." : "Audit My Bill"}
-        </Button>
+            <p className="text-[10px] text-slate-400 uppercase font-bold">Drop Insurance PDF Here</p>
+          </div> 
+        )}
       </div>
+    )}
+  </div>
+
+  <div className="flex flex-col gap-4 pt-4 border-t">
+    {!showInsuranceUpload && (
+      <Button type="button" variant="link" className="text-muted-foreground p-0 h-auto justify-start" onClick={() => setShowInsuranceUpload(true)}>
+        <PlusCircle className="mr-2 h-4 w-4" />
+        Verify with Insurance Plan
+      </Button>
+    )}
+    <div className="flex gap-2 flex-wrap">
+      <Button 
+        type="submit" 
+        size="lg" 
+        /* Ensure canAudit is checking for billText or imageData */
+        disabled={!canAudit || isPending} 
+        className={`w-full ${canAudit ? 'bg-blue-600' : 'bg-slate-300'}`}
+      >
+        {isPending ? "Auditing..." : "Audit My Bill"}
+      </Button>
     </div>
-  </form>
-</div>
+  </div>
+</form>
         </CardContent>
       </Card>
     )}
