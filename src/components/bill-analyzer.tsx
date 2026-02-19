@@ -787,10 +787,9 @@ return (
           </CardDescription>
         </CardHeader>
         <CardContent>
-/* 1. THE MAIN WRAPPER (Catches everything as a Bill) */
+/* 1. Page-level wrapper to catch any drop as a Bill */
 <div 
-  className="min-h-[500px] w-full"
-  onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); }}
+  className="min-h-screen"
   onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; }} 
   onDrop={(e) => {
     e.preventDefault();
@@ -798,12 +797,12 @@ return (
     const file = e.dataTransfer.files[0];
     if (!file) return;
 
-    // Default behavior: Everything dropped on the main area is the Bill
     if (file.type.startsWith('image/')) {
       const reader = new FileReader();
       reader.onload = (event) => setImageData(event.target?.result as string);
       reader.readAsDataURL(file);
     } else if (file.type === 'application/pdf') {
+      // Any drop on the page that isn't the tiny insurance box becomes the Bill
       setBillText(`Medical Bill: ${file.name}`);
     }
   }}
@@ -821,8 +820,8 @@ return (
           </div>
         ) : (
           <Textarea
-            placeholder="Drop your Bill PDF or Image anywhere on this screen..."
-            className="min-h-[200px] resize-y bg-white"
+            placeholder="Paste your bill text here, or drag a file anywhere..."
+            className="min-h-[200px] resize-y"
             value={billText}
             onChange={(e) => setBillText(e.target.value)}
             disabled={isPending}
@@ -835,51 +834,37 @@ return (
           onChange={handleBillFileChange}
           className="hidden"
         />
-        <Button type="button" variant="outline" className="mt-2" onClick={() => billFileInputRef.current?.click()}>
-          <Camera className="mr-2 h-4 w-4" /> Camera / Upload
+        <Button type="button" variant="outline" className="mt-2 hover:bg-slate-900 hover:text-white" onClick={() => billFileInputRef.current?.click()}>
+          <Camera className="mr-2 h-4 w-4" />
+          Camera / Upload
         </Button>
       </div>
      
       {showInsuranceUpload && (
         <div className="space-y-2 pt-4 border-t">
-          <h3 className="font-semibold text-slate-900">Insurance Summary (Optional)</h3>
-          
-          {/* 2. THE SPECIFIC INSURANCE DROP ZONE (Very Small Area) */}
+          {/* 2. Tiny, specific drop zone for Insurance only */}
           <div 
+            className={`p-2 rounded-md border-2 border-dashed transition-colors ${insurancePdfFile ? 'bg-blue-50 border-blue-400' : 'bg-slate-50 border-slate-200'}`}
             onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
             onDrop={(e) => {
               e.preventDefault();
-              e.stopPropagation(); // 👈 This stops the file from "bubbling up" to the Bill zone
+              e.stopPropagation(); // Stops it from becoming a 'Bill'
               const file = e.dataTransfer.files[0];
               if (file && file.type === 'application/pdf') {
                 setInsurancePdfFile(file);
               }
             }}
-            className={`relative flex items-center justify-center rounded-md border-2 border-dashed p-4 transition-colors ${
-              insurancePdfFile ? 'border-blue-500 bg-blue-50' : 'border-slate-300 bg-slate-50 hover:border-blue-400'
-            }`}
           >
+            <h3 className="text-sm font-semibold text-slate-900">Insurance Summary (Optional)</h3>
             {insurancePdfFile ? (
-              <>
-                <FileText className="h-6 w-6 text-blue-600 mr-2" />
-                <span className="text-sm font-medium truncate max-w-[200px]">{insurancePdfFile.name}</span>
-                <Button type="button" variant="ghost" size="icon" className="ml-2" onClick={clearInsurancePdf}>
-                  <X className="h-4 w-4" />
-                </Button>
-              </>
-            ) : (
-              <div className="text-center">
-                <p className="text-xs text-slate-500 italic">Drop Insurance PDF exactly here</p>
+              <div className="flex items-center gap-2 mt-1">
+                <FileText className="h-4 w-4 text-blue-600" />
+                <span className="text-xs truncate">{insurancePdfFile.name}</span>
+                <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={clearInsurancePdf}><X className="h-3 w-3" /></Button>
               </div>
+            ) : (
+              <p className="text-[10px] text-slate-400">Drop insurance PDF here</p>
             )}
-            <input 
-              id="pdf-upload" 
-              ref={insuranceFileInputRef} 
-              type="file" 
-              accept="application/pdf" 
-              onChange={handleInsuranceFileChange} 
-              className="hidden" 
-            />
           </div>
         </div>
       )}
