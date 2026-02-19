@@ -30,7 +30,7 @@ export async function POST(req: Request) {
       }
     );
 
-    // VERCEL HARDENING: Use getSession first, then getUser for security
+    // VERCEL HARDENING: Authenticate the user before creating a session
     const { data: { session }, error: sessionError } = await supabase.auth.getSession();
     
     if (sessionError || !session?.user) {
@@ -44,12 +44,20 @@ export async function POST(req: Request) {
       payment_method_types: ['card'],
       line_items: [{ price: STRIPE_PRICE_ID, quantity: 1 }],
       mode: 'subscription',
+      
+      // 🎟️ Enables the promotion code box for your "pantestingonly" coupon
+      allow_promotion_codes: true, 
+
+      // 🏦 Enables tax calculation based on your SaaS selection
+      automatic_tax: { enabled: true },
+      customer_update: { address: 'auto' },
+
       metadata: {      
         userId: user.id,
         auditId: body.auditId,
         totalAmount: String(body.billedAmount || "0.00"),      
         suggestedAmount: String(body.expectedAmount || "0.00"), 
-        // Stripe Limit: 500 chars. We truncate to 400 to be safe.
+        // Truncate analysis data to stay within Stripe's 500-char metadata limit
         analysisData: String(body.analysisMarkdown || "").substring(0, 400), 
         patientName: String(body.patientName || ""),
         reasoning: String(body.reasoning || "Discrepancy detected").substring(0, 400)
@@ -58,6 +66,7 @@ export async function POST(req: Request) {
       cancel_url: `${process.env.NEXT_PUBLIC_SITE_URL}/audit/${body.auditId}?canceled=true`,
     });
 
+    // Returns the Stripe URL so your frontend can perform the redirect
     return NextResponse.json({ url: stripeSession.url });
   } catch (err: any) {
     console.error('SERVER_CRASH:', err.message);
