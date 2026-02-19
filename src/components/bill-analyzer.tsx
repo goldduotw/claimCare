@@ -787,118 +787,134 @@ return (
           </CardDescription>
         </CardHeader>
         <CardContent>
-{/* 1. We wrap the entire form in a div that catches Drag/Drop events */}
-          <div 
-            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }} 
-            onDrop={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              const files = e.dataTransfer.files;
-              if (files && files.length > 0) {
-                const file = files[0];
-                // Check if it's an image or PDF and route it to your existing handlers
-                if (file.type.startsWith('image/')) {
-                  const reader = new FileReader();
-                  reader.onload = (event) => setImageData(event.target?.result as string);
-                  reader.readAsDataURL(file);
-                } else if (file.type === 'application/pdf') {
-                  setInsurancePdfFile(file); // Or handleBillFileChange(e) logic
-                }
-              }
-            }}
-          >
-            <form onSubmit={handleAudit} className="space-y-4">
-              <div className="space-y-4">
-                <div>
-                  <h3 className="font-semibold mb-2 text-slate-900">Medical Bill</h3>
-                  {imageData ? (
-                    <div className="relative">
-                      <img src={imageData} alt="Medical bill preview" className="rounded-md max-h-60 w-auto" />
-                      <Button type="button" variant="ghost" size="icon" className="absolute top-2 right-2 bg-background/50 hover:bg-background/80" onClick={clearImage}>
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ) : (
-                    <Textarea
-                      placeholder="Paste your bill text here..."
-                      className={`min-h-[200px] resize-y transition-all ${isPending ? 'opacity-50' : 'opacity-100'}`}
-                      value={billText}
-                      onChange={(e) => setBillText(e.target.value)}
-                      disabled={isPending}
-                    />
-                  )}
-                  <input
-                    type="file"
-                    accept="image/*,application/pdf"
-                    capture="environment"
-                    ref={billFileInputRef}
-                    onChange={handleBillFileChange}
-                    className="hidden"
-                    disabled={isPending}
-                  />
-                  <Button 
-                    type="button" 
-                    variant="outline" 
-                    className="mt-2 hover:bg-slate-900 hover:text-white" 
-                    onClick={() => billFileInputRef.current?.click()} 
-                    disabled={isPending}
-                  >
-                    <Camera className="mr-2 h-4 w-4" />
-                    Camera / Upload
-                  </Button>
-                </div>
-               
-                {showInsuranceUpload && (
-                  <div className="space-y-2 pt-4 border-t">
-                    <h3 className="font-semibold text-slate-900">Insurance Summary (Optional)</h3>
-                    {insurancePdfFile ? (
-                      <div className="relative flex items-center gap-2 rounded-md border p-4 bg-blue-50 border-blue-200">
-                        <FileText className="h-6 w-6 text-blue-600" />
-                        <span className="text-sm font-medium truncate text-blue-900">{insurancePdfFile.name}</span>
-                        <Button type="button" variant="ghost" size="icon" className="absolute top-1/2 right-2 -translate-y-1/2" onClick={clearInsurancePdf}>
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-center w-full">
-                        <label htmlFor="pdf-upload" className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer bg-muted/50 hover:bg-muted transition-colors hover:border-blue-400">
-                          <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                            <FileText className="w-8 h-8 mb-4 text-muted-foreground" />
-                            <p className="mb-2 text-sm text-center text-muted-foreground"><span className="font-semibold">Drag & Drop PDF here</span></p>
-                          </div>
-                          <input id="pdf-upload" ref={insuranceFileInputRef} type="file" accept="application/pdf" onChange={handleInsuranceFileChange} className="hidden" />
-                        </label>
-                      </div> 
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <div className="flex flex-col gap-4 pt-4 border-t">
-                {!showInsuranceUpload && (
-                  <Button type="button" variant="link" className="text-muted-foreground p-0 h-auto justify-start" onClick={() => setShowInsuranceUpload(true)}>
-                    <PlusCircle className="mr-2 h-4 w-4" />
-                    Verify with Insurance Plan
-                  </Button>
-                )}
-                <div className="flex gap-2 flex-wrap">
-                  {/* 2. THE SHOCK BUTTON: Changes color and shakes when file is ready */}
-                  <Button 
-                    type="submit" 
-                    size="lg" 
-                    disabled={!canAudit} 
-                    className={`w-full md:w-auto transition-all duration-300 ${
-                      canAudit 
-                      ? 'bg-red-600 hover:bg-red-700 animate-pulse shadow-[0_0_15px_rgba(255,0,0,0.5)] scale-105' 
-                      : 'bg-blue-600 text-white hover:bg-blue-700'
-                    }`}
-                  >
-                    {canAudit ? "🚨 AUDIT SYSTEM DETECTED BILL" : "Audit My Bill"}
-                  </Button>
-                </div>
-              </div>
-            </form>
+<div 
+  className="relative"
+  onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); }}
+  onDragOver={(e) => { 
+    e.preventDefault(); 
+    e.stopPropagation(); 
+    e.dataTransfer.dropEffect = 'copy'; 
+  }} 
+  onDrop={(e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      const file = files[0];
+      
+      // Handle Image (Medical Bill)
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          if (event.target?.result) {
+            setImageData(event.target.result as string);
+          }
+        };
+        reader.readAsDataURL(file);
+      } 
+      // Handle PDF (Insurance/Bill)
+      else if (file.type === 'application/pdf') {
+        setInsurancePdfFile(file);
+        if (!showInsuranceUpload) setShowInsuranceUpload(true);
+      }
+    }
+  }}
+>
+  <form onSubmit={handleAudit} className="space-y-4">
+    <div className="space-y-4">
+      <div>
+        <h3 className="font-semibold mb-2 text-slate-900">Medical Bill</h3>
+        {imageData ? (
+          <div className="relative">
+            <img src={imageData} alt="Medical bill preview" className="rounded-md max-h-60 w-auto shadow-md border" />
+            <Button type="button" variant="ghost" size="icon" className="absolute top-2 right-2 bg-background/50 hover:bg-background/80" onClick={clearImage}>
+              <X className="h-4 w-4" />
+            </Button>
           </div>
+        ) : (
+          <Textarea
+            placeholder="Paste your bill text here, or drag a file anywhere..."
+            className={`min-h-[200px] resize-y transition-all ${isPending ? 'opacity-50' : 'opacity-100'}`}
+            value={billText}
+            onChange={(e) => setBillText(e.target.value)}
+            disabled={isPending}
+          />
+        )}
+        <input
+          type="file"
+          accept="image/*,application/pdf"
+          capture="environment"
+          ref={billFileInputRef}
+          onChange={handleBillFileChange}
+          className="hidden"
+          disabled={isPending}
+        />
+        <Button 
+          type="button" 
+          variant="outline" 
+          className="mt-2 hover:bg-slate-900 hover:text-white transition-colors" 
+          onClick={() => billFileInputRef.current?.click()} 
+          disabled={isPending}
+        >
+          <Camera className="mr-2 h-4 w-4" />
+          Camera / Upload
+        </Button>
+      </div>
+     
+      {showInsuranceUpload && (
+        <div className="space-y-2 pt-4 border-t animate-in fade-in slide-in-from-top-2">
+          <h3 className="font-semibold text-slate-900">Insurance Summary (Optional)</h3>
+          {insurancePdfFile ? (
+            <div className="relative flex items-center gap-2 rounded-md border p-4 bg-blue-50 border-blue-200">
+              <FileText className="h-6 w-6 text-blue-600" />
+              <div className="flex flex-col overflow-hidden">
+                <span className="text-sm font-medium truncate">{insurancePdfFile.name}</span>
+                <span className="text-xs text-blue-500 uppercase font-bold">PDF Ready for Audit</span>
+              </div>
+              <Button type="button" variant="ghost" size="icon" className="absolute top-1/2 right-2 -translate-y-1/2" onClick={clearInsurancePdf}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-center w-full">
+              <label htmlFor="pdf-upload" className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer bg-muted/50 hover:bg-muted transition-all hover:border-blue-400">
+                <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                  <FileText className="w-8 h-8 mb-4 text-muted-foreground" />
+                  <p className="mb-2 text-sm text-center text-muted-foreground"><span className="font-semibold">Drop PDF here</span></p>
+                </div>
+                <input id="pdf-upload" ref={insuranceFileInputRef} type="file" accept="application/pdf" onChange={handleInsuranceFileChange} className="hidden" />
+              </label>
+            </div> 
+          )}
+        </div>
+      )}
+    </div>
+
+    <div className="flex flex-col gap-4 pt-4 border-t">
+      {!showInsuranceUpload && (
+        <Button type="button" variant="link" className="text-muted-foreground p-0 h-auto justify-start" onClick={() => setShowInsuranceUpload(true)}>
+          <PlusCircle className="mr-2 h-4 w-4" />
+          Verify with Insurance Plan
+        </Button>
+      )}
+      <div className="flex gap-2 flex-wrap">
+        <Button 
+          type="submit" 
+          size="lg" 
+          disabled={!canAudit} 
+          className={`w-full md:w-auto transition-all duration-300 font-bold tracking-tight ${
+            canAudit 
+            ? 'bg-[#FF0000] text-white hover:bg-red-700 animate-bounce shadow-[0_0_20px_rgba(255,0,0,0.6)] scale-110' 
+            : 'bg-blue-600 text-white hover:bg-blue-700'
+          }`}
+        >
+          {canAudit ? "🚨 DETECT OVERCHARGES" : "Audit My Bill"}
+        </Button>
+      </div>
+    </div>
+  </form>
+</div>
         </CardContent>
       </Card>
     )}
