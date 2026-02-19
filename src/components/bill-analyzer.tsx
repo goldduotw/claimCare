@@ -788,92 +788,106 @@ return (
         </CardHeader>
         <CardContent>
 <div 
-  className="relative"
-  onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }} 
+  onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; }} 
   onDrop={(e) => {
     e.preventDefault();
+    e.stopPropagation();
     const file = e.dataTransfer.files[0];
     if (!file) return;
 
-    // 1. If it's an image, it's ALWAYS the Medical Bill
     if (file.type.startsWith('image/')) {
       const reader = new FileReader();
       reader.onload = (event) => setImageData(event.target?.result as string);
       reader.readAsDataURL(file);
-    } 
-    // 2. If it's a PDF, we check if the Bill slot is already full
-    else if (file.type === 'application/pdf') {
-      if (!billText && !imageData) {
-        setBillText(`Medical Bill: ${file.name}`); // First PDF = The Bill
+    } else if (file.type === 'application/pdf') {
+      // If Insurance slot is open and visible, drop there; otherwise, it's the Bill.
+      if (showInsuranceUpload && !insurancePdfFile) {
+        setInsurancePdfFile(file);
       } else {
-        setInsurancePdfFile(file); // Second PDF = Insurance
-        setShowInsuranceUpload(true);
+        setBillText(`Medical Bill: ${file.name}`);
       }
     }
   }}
 >
   <form onSubmit={handleAudit} className="space-y-4">
     <div className="space-y-4">
-      
-      {/* SECTION 1: MEDICAL BILL */}
-      <div className={`p-6 rounded-2xl border-2 transition-all duration-500 ${
-        imageData || billText ? 'border-green-500 bg-green-50' : 'border-dashed border-slate-300 bg-slate-50'
-      }`}>
-        <h3 className="font-bold mb-2 text-slate-900 flex items-center gap-2">
-          {imageData || billText ? <CheckCircle2 className="text-green-600 h-5 w-5" /> : null}
-          1. Medical Bill (Drop PDF or Photo)
-        </h3>
+      <div>
+        <h3 className="font-semibold mb-2 text-slate-900">Medical Bill</h3>
         {imageData ? (
-          <div className="relative inline-block">
-            <img src={imageData} alt="Bill" className="rounded-lg max-h-40 shadow-md" />
-            <Button type="button" variant="destructive" size="icon" className="absolute -top-2 -right-2 h-6 w-6 rounded-full" onClick={clearImage}><X /></Button>
-          </div>
-        ) : billText ? (
-          <div className="flex items-center gap-2 p-3 bg-white rounded-lg border border-green-200">
-            <FileText className="h-6 w-6 text-green-600" />
-            <span className="text-sm font-medium truncate">{billText}</span>
-            <Button type="button" variant="ghost" size="icon" onClick={() => setBillText("")}><X className="h-4 w-4" /></Button>
+          <div className="relative">
+            <img src={imageData} alt="Medical bill preview" className="rounded-md max-h-60 w-auto" />
+            <Button type="button" variant="ghost" size="icon" className="absolute top-2 right-2 bg-background/50 hover:bg-background/80" onClick={clearImage}>
+              <X className="h-4 w-4" />
+            </Button>
           </div>
         ) : (
-          <div className="py-4 text-center text-slate-400 text-sm italic">Drag & Drop Bill Here</div>
+          <Textarea
+            placeholder="Paste your bill text here, or drag your PDF/Image anywhere..."
+            className="min-h-[200px] resize-y"
+            value={billText}
+            onChange={(e) => setBillText(e.target.value)}
+            disabled={isPending}
+          />
         )}
+        <input
+          type="file"
+          accept="image/*,application/pdf"
+          capture="environment"
+          ref={billFileInputRef}
+          onChange={handleBillFileChange}
+          className="hidden"
+          disabled={isPending}
+        />
+        <Button type="button" variant="outline" className="mt-2 hover:bg-slate-900 hover:text-white" onClick={() => billFileInputRef.current?.click()} disabled={isPending}>
+          <Camera className="mr-2 h-4 w-4" />
+          Camera / Upload
+        </Button>
       </div>
-
-      {/* SECTION 2: INSURANCE (The "Accuracy Booster") */}
-      <div 
-        className={`p-4 rounded-2xl border-2 transition-all duration-500 ${
-          insurancePdfFile ? 'border-blue-500 bg-blue-50' : 'border-dashed border-slate-300'
-        }`}
-        onClick={() => !showInsuranceUpload && setShowInsuranceUpload(true)}
-      >
-        <h3 className="font-semibold text-slate-900 text-sm mb-2">2. Insurance Plan / EOB (Optional)</h3>
-        {insurancePdfFile ? (
-          <div className="flex items-center gap-2 p-2 bg-white rounded border border-blue-200">
-            <FileText className="h-5 w-5 text-blue-600" />
-            <span className="text-xs truncate flex-1">{insurancePdfFile.name}</span>
-            <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={clearInsurancePdf}><X className="h-3 w-3" /></Button>
-          </div>
-        ) : (
-          <div className="text-center py-2 text-xs text-slate-400 cursor-pointer hover:text-blue-500">
-            + Add Insurance PDF for 99% accuracy
-          </div>
-        )}
-      </div>
+     
+      {showInsuranceUpload && (
+        <div className="space-y-2 pt-4 border-t">
+          <h3 className="font-semibold text-slate-900">Insurance Summary (Optional)</h3>
+          {insurancePdfFile ? (
+            <div className="relative flex items-center gap-2 rounded-md border p-4">
+              <FileText className="h-6 w-6 text-muted-foreground" />
+              <span className="text-sm font-medium truncate">{insurancePdfFile.name}</span>
+              <Button type="button" variant="ghost" size="icon" className="absolute top-1/2 right-2 -translate-y-1/2" onClick={clearInsurancePdf}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-center w-full">
+              <label htmlFor="pdf-upload" className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer bg-muted/50 hover:bg-muted">
+                <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                  <FileText className="w-8 h-8 mb-4 text-muted-foreground" />
+                  <p className="mb-2 text-sm text-center text-muted-foreground"><span className="font-semibold">Click to upload</span></p>
+                </div>
+                <input id="pdf-upload" ref={insuranceFileInputRef} type="file" accept="application/pdf" onChange={handleInsuranceFileChange} className="hidden" />
+              </label>
+            </div> 
+          )}
+        </div>
+      )}
     </div>
 
-    {/* THE VFD RED BUTTON */}
-    <Button 
-      type="submit" 
-      size="lg" 
-      disabled={!canAudit} 
-      className={`w-full py-10 text-2xl font-black rounded-2xl transition-all duration-700 ${
-        canAudit 
-        ? 'bg-[#FF0000] text-white animate-bounce shadow-[0_0_50px_rgba(255,0,0,0.8)] scale-105 border-b-8 border-red-900 active:border-b-0' 
-        : 'bg-slate-200 text-slate-400'
-      }`}
-    >
-      {canAudit ? "🚀 START AI AUDIT" : "UPLOAD BILL TO START"}
-    </Button>
+    <div className="flex flex-col gap-4 pt-4 border-t">
+      {!showInsuranceUpload && (
+        <Button type="button" variant="link" className="text-muted-foreground p-0 h-auto justify-start" onClick={() => setShowInsuranceUpload(true)}>
+          <PlusCircle className="mr-2 h-4 w-4" />
+          Verify with Insurance Plan
+        </Button>
+      )}
+      <div className="flex gap-2 flex-wrap">
+        <Button 
+          type="submit" 
+          size="lg" 
+          disabled={!canAudit} 
+          className="bg-blue-600 text-white hover:bg-blue-700"
+        >
+          {isPending ? "Auditing..." : "Audit My Bill"}
+        </Button>
+      </div>
+    </div>
   </form>
 </div>
         </CardContent>
