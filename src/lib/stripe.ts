@@ -1,6 +1,10 @@
 import Stripe from "stripe";
 // Ensure your price ID is exported for use in other components
-export const STRIPE_PRICE_ID = 'price_1St9DXIfd6AnPI39bhYpzt6P';
+export const STRIPE_PRICE_ID = 'price_1T2J3uISoOtTw4gtpBcYR1Cr';
+
+// test price id
+//export const STRIPE_PRICE_ID = 'price_1St9DXIfd6AnPI39bhYpzt6P';
+
 
 /**
  * Starts the payment process by calling our Next.js API route.
