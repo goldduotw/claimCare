@@ -544,7 +544,6 @@ const renderAnalysis = () => {
 
     const isUnlockedReport = initialData?.status === 'paid' || isUnlocked;
 
-    // FIXED: Full letter copy logic
     const copyLetterToClipboard = () => {
       const fullLetter = `
 DATE: ${new Date().toLocaleDateString()}
@@ -559,8 +558,6 @@ AUDITOR FINDINGS:
 "${analysisResult.reasoning}"
 
 Based on fair market pricing and proper billing practices, the expected amount for these services should be $${analysisResult.totalExpected?.toFixed(2)} rather than the $${analysisResult.totalBilled?.toFixed(2)} currently requested.
-
-Please review the line items in the associated Medical Advocacy Report and provide an adjusted invoice reflecting these corrections.
 
 Sincerely,
 ${analysisResult.patientName}
@@ -609,67 +606,79 @@ ${analysisResult.patientName}
           )}
         </div>
 
-{!isUnlockedReport ? (
-          /* LOCKED VIEW - FIXED FOR PORTRAIT */
-   analysisResult.totalBilled > analysisResult.totalExpected && (     
+        {!isUnlockedReport ? (
+          /* LOCKED VIEW */
           <div className="relative space-y-6 w-full max-w-full overflow-hidden">
-            <Alert variant="destructive" className={`bg-red-50 border-red-200 p-4 md:p-8 rounded-2xl ${showPaywall ? "blur-md pointer-events-none opacity-60" : ""}`}>
-              {/* Changed to flex-col for mobile, md:flex-row for desktop */}
-              <div className="flex flex-col md:flex-row items-center justify-between gap-4 md:gap-6">
-                <div className="flex flex-col md:flex-row items-center gap-4 w-full text-center md:text-left">
-                  <div className="bg-red-100 p-3 rounded-full hidden md:block">
-                    <AlertCircle className="h-8 w-8 text-red-600" />
-                  </div>
-                  
-                  <div className="w-full">
-                    {/* Prices: Stacked on mobile to prevent horizontal overflow */}
-                    <div className="text-red-700 font-semibold text-lg md:text-xl mb-3 flex flex-col md:flex-row justify-center md:justify-start items-center gap-2 md:gap-6">
-                      <span>Billed: ${analysisResult.totalBilled?.toFixed(2)}</span>
-                      <span className="hidden md:inline text-slate-300">|</span>
-                      <span className="text-green-700 font-bold">Fair Price: ${analysisResult.totalExpected?.toFixed(2)}</span>
+            {analysisResult.totalBilled > analysisResult.totalExpected ? (
+              /* CASE A: Overcharge Found - Show Dispute Options */
+              <>
+                <Alert variant="destructive" className={`bg-red-50 border-red-200 p-4 md:p-8 rounded-2xl ${showPaywall ? "blur-md pointer-events-none opacity-60" : ""}`}>
+                  <div className="flex flex-col md:flex-row items-center justify-between gap-4 md:gap-6">
+                    <div className="flex flex-col md:flex-row items-center gap-4 w-full text-center md:text-left">
+                      <div className="bg-red-100 p-3 rounded-full hidden md:block">
+                        <AlertCircle className="h-8 w-8 text-red-600" />
+                      </div>
+                      <div className="w-full">
+                        <div className="text-red-700 font-semibold text-lg md:text-xl mb-3 flex flex-col md:flex-row justify-center md:justify-start items-center gap-2 md:gap-6">
+                          <span>Billed: ${analysisResult.totalBilled?.toFixed(2)}</span>
+                          <span className="hidden md:inline text-slate-300">|</span>
+                          <span className="text-green-700 font-bold">Fair Price: ${analysisResult.totalExpected?.toFixed(2)}</span>
+                        </div>
+                        <p className="text-red-800/80 italic text-xs md:text-sm line-clamp-2 max-w-full md:max-w-xl mx-auto md:mx-0">
+                          <strong>Preliminary Findings:</strong> {analysisResult.reasoning}
+                        </p>
+                      </div>
                     </div>
-                    
-                    {/* Reasoning: Limited width for portrait */}
-                    <p className="text-red-800/80 italic text-xs md:text-sm line-clamp-2 max-w-full md:max-w-xl mx-auto md:mx-0">
-                      <strong>Preliminary Findings:</strong> {analysisResult.reasoning}
-                    </p>
+
+                    {!showPaywall && (
+                      <Button 
+                        onClick={() => handleVFDClick()} 
+                        className="bg-red-600 hover:bg-red-700 text-white font-bold w-full md:w-auto px-6 md:px-10 py-4 md:py-7 h-auto text-sm md:text-lg shadow-xl cursor-pointer"
+                      >
+                        Verify with Front Desk
+                      </Button>
+                    )}
+                  </div>
+                </Alert>
+
+                {showPaywall && (
+                  <div className="absolute inset-0 z-10 flex items-center justify-center animate-in zoom-in-95 duration-300 px-4">
+                    <Button 
+                      onClick={() => handleUMSUnlock()} 
+                      disabled={isSubscribing}
+                      className={`${
+                        isSubscribing ? 'bg-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
+                      } text-white font-black w-full max-w-[280px] md:max-w-none px-12 py-6 md:py-8 h-auto text-lg md:text-xl shadow-2xl transition-all`}
+                    >
+                      {isSubscribing ? (
+                        <div className="flex items-center gap-3">
+                          <Loader2 className="h-6 w-6 animate-spin" />
+                          Connecting...
+                        </div>
+                      ) : (
+                        'Start Subscription ($3.99/mo)'
+                      )}
+                    </Button>
+                  </div>
+                )}
+              </>
+            ) : (
+              /* CASE B: No Discrepancy Found - Show Success Message */
+              <Alert className="bg-green-50 border-green-200 p-4 md:p-8 rounded-2xl">
+                <div className="flex items-center gap-4">
+                  <div className="bg-green-100 p-3 rounded-full">
+                    <CheckCircle2 className="h-8 w-8 text-green-600" />
+                  </div>
+                  <div>
+                    <AlertTitle className="text-green-900 font-bold text-lg">Fair Billing Verified</AlertTitle>
+                    <AlertDescription className="text-green-800">
+                      Our audit indicates your bill of ${analysisResult.totalBilled?.toFixed(2)} aligns with fair market pricing. No significant discrepancies were detected.
+                    </AlertDescription>
                   </div>
                 </div>
-
-                {!showPaywall && (
-                  /* Button: Full width on mobile, auto width on desktop */
-                  <Button 
-                    onClick={() => handleVFDClick()} 
-                    className="bg-red-600 hover:bg-red-700 text-white font-bold w-full md:w-auto px-6 md:px-10 py-4 md:py-7 h-auto text-sm md:text-lg shadow-xl cursor-pointer"
-                  >
-                    Verify with Front Desk
-                  </Button>
-                )}
-              </div>
-            </Alert>
-
-            {showPaywall && (
-              <div className="absolute inset-0 z-10 flex items-center justify-center animate-in zoom-in-95 duration-300 px-4">
-                <Button 
-                  onClick={() => handleUMSUnlock()} 
-                  disabled={isSubscribing}
-                  className={`${
-                    isSubscribing ? 'bg-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
-                  } text-white font-black w-full max-w-[280px] md:max-w-none px-12 py-6 md:py-8 h-auto text-lg md:text-xl shadow-2xl transition-all`}
-                >
-                  {isSubscribing ? (
-                    <div className="flex items-center gap-3">
-                      <Loader2 className="h-6 w-6 animate-spin" />
-                      Connecting...
-                    </div>
-                  ) : (
-                    'Start Subscription ($3.99/mo)'
-                  )}
-                </Button>
-              </div>
+              </Alert>
             )}
           </div>
-   )
         ) : (
           /* UNLOCKED VIEW */
           <div ref={analysisRef} className="animate-in fade-in duration-500">
@@ -709,7 +718,7 @@ ${analysisResult.patientName}
                     "{analysisResult.reasoning}"
                   </div>
                   <p className="mb-4">
-                    Based on market pricing, the expected amount should be ${analysisResult.totalExpected?.toFixed(2)} rather than the ${analysisResult.totalBilled?.toFixed(2)} requested. Please provide an adjusted invoice reflecting these corrections.
+                    Based on market pricing, the expected amount should be ${analysisResult.totalExpected?.toFixed(2)} rather than the ${analysisResult.totalBilled?.toFixed(2)} requested.
                   </p>
                   <p className="mt-12">Sincerely,</p>
                   <div className="mt-12 pt-4 border-t w-64 border-slate-300 italic text-slate-400">
@@ -733,14 +742,14 @@ ${analysisResult.patientName}
                   </div>
                 </div>
                 <div className="text-right">
-                   <div className="text-xs uppercase tracking-wider text-slate-500 font-bold mb-1">Potential Savings</div>
-                   <div className="text-3xl font-black text-green-600 animate-pulse">
+                    <div className="text-xs uppercase tracking-wider text-slate-500 font-bold mb-1">Potential Savings</div>
+                    <div className="text-3xl font-black text-green-600 animate-pulse">
                     ${(analysisResult.totalBilled - analysisResult.totalExpected).toFixed(2)}
-                   </div>
-                   <div className="flex items-center justify-end gap-1 mt-1 text-slate-400 text-[10px] uppercase font-bold">
-                    <CheckCircle2 className="h-3 w-3 text-green-500" />
-                    Verified Audit
-                   </div>
+                    </div>
+                    <div className="flex items-center justify-end gap-1 mt-1 text-slate-400 text-[10px] uppercase font-bold">
+                     <CheckCircle2 className="h-3 w-3 text-green-500" />
+                     Verified Audit
+                    </div>
                 </div>
               </div>
             </div>
@@ -748,7 +757,7 @@ ${analysisResult.patientName}
         )}
       </div>
     );
-  };
+};
 
 return (    
   <div className="grid gap-6">
