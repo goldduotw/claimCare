@@ -786,7 +786,16 @@ return (
             Paste the text from your hospital bill, or upload a photo of it. Our AI will perform a general audit for potential errors.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+<CardContent 
+          onDragOver={(e) => e.preventDefault()} 
+          onDrop={(e) => {
+            e.preventDefault();
+            const file = e.dataTransfer.files[0];
+            if (file && file.type.startsWith('image/')) {
+              handleBillFileChange({ target: { files: [file] } } as any);
+            }
+          }}
+        >
           <form onSubmit={handleAudit} className="space-y-4">
             <div className="space-y-4">
               <div>
@@ -821,7 +830,7 @@ return (
                   Camera / Upload
                 </Button>
               </div>
-             
+              
               {showInsuranceUpload && (
                 <div className="space-y-2 pt-4 border-t">
                   <h3 className="font-semibold text-slate-900">Insurance Summary (Optional)</h3>
@@ -855,10 +864,17 @@ return (
                   Verify with Insurance Plan
                 </Button>
               )}
-              <div className="flex gap-2 flex-wrap">
+              <div className="flex gap-2 flex-wrap items-center">
                 <Button type="submit" size="lg" disabled={!canAudit} className="bg-blue-600 text-white hover:bg-blue-700">
                   Audit My Bill
                 </Button>
+
+                {/* Fix for Problem 1: Only show VFD if fair price is actually lower than billed */}
+                {fairPrice < billedAmount && (
+                  <Button type="button" className="bg-red-600 hover:bg-red-700 text-white">
+                    Verify with Front Desk
+                  </Button>
+                )}
               </div>
             </div>
           </form>
