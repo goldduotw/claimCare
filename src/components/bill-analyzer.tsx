@@ -787,9 +787,10 @@ return (
           </CardDescription>
         </CardHeader>
 <CardContent 
-          onDragOver={(e) => e.preventDefault()} 
+          onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }} 
           onDrop={(e) => {
             e.preventDefault();
+            e.stopPropagation();
             const file = e.dataTransfer.files[0];
             if (file && file.type.startsWith('image/')) {
               handleBillFileChange({ target: { files: [file] } } as any);
@@ -864,17 +865,10 @@ return (
                   Verify with Insurance Plan
                 </Button>
               )}
-              <div className="flex gap-2 flex-wrap items-center">
+              <div className="flex gap-2 flex-wrap">
                 <Button type="submit" size="lg" disabled={!canAudit} className="bg-blue-600 text-white hover:bg-blue-700">
                   Audit My Bill
                 </Button>
-
-                {/* Fix for Problem 1: Only show VFD if fair price is actually lower than billed */}
-                {fairPrice < billedAmount && (
-                  <Button type="button" className="bg-red-600 hover:bg-red-700 text-white">
-                    Verify with Front Desk
-                  </Button>
-                )}
               </div>
             </div>
           </form>
