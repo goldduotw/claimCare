@@ -611,6 +611,7 @@ ${analysisResult.patientName}
 
 {!isUnlockedReport ? (
           /* LOCKED VIEW - FIXED FOR PORTRAIT */
+   analysisResult.totalBilled > analysisResult.totalExpected && (     
           <div className="relative space-y-6 w-full max-w-full overflow-hidden">
             <Alert variant="destructive" className={`bg-red-50 border-red-200 p-4 md:p-8 rounded-2xl ${showPaywall ? "blur-md pointer-events-none opacity-60" : ""}`}>
               {/* Changed to flex-col for mobile, md:flex-row for desktop */}
@@ -668,6 +669,7 @@ ${analysisResult.patientName}
               </div>
             )}
           </div>
+   )
         ) : (
           /* UNLOCKED VIEW */
           <div ref={analysisRef} className="animate-in fade-in duration-500">
