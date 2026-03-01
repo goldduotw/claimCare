@@ -2,8 +2,8 @@ import { MetadataRoute } from 'next'
  
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'ClaimCare',
-    short_name: 'ClaimCare',
+    name: 'BillVerify',
+    short_name: 'BillVerify',
     description: 'Analyze your medical bills for errors and potential savings.',
     start_url: '/',
     display: 'standalone',

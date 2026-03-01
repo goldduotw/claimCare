@@ -43,14 +43,14 @@ export default function Home() {
             <div className="bg-primary rounded-md p-1.5">
               <ClaimCareIcon className="h-6 w-6 text-primary-foreground" />
             </div>
-            <span className="font-headline text-foreground">ClaimCare</span>
+            <span className="font-headline text-foreground">BillVerify</span>
           </div>
         </div>
       </header>
       <main className="flex-1 pt-6 px-4 md:px-8 max-w-5xl mx-auto w-full relative z-0">
         <div className="flex items-center gap-3 mb-8">
           <img src="/icon.png" alt="Logo" className="w-14 h-14 object-contain"/>
-          <h1 className="text-2xl font-semibold md:text-3xl font-headline text-slate-900">Medical Bill Audit</h1>
+          <h1 className="text-2xl font-semibold md:text-3xl font-headline text-slate-900">Medical Bill Assist</h1>
         </div>
         <div className="bg-background rounded-xl shadow-sm border p-1 relative z-[9999]">
           <BillAnalyzer /> 
