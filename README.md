@@ -4,6 +4,8 @@ Purpose:
 The medical bill auditor is aimed at decoding the complex medical bills that often leave patients in the dark. Powered by Google Gemini, the system identifies overcharges by upcoding, duplicate, and unbundling, etc. 
 
 principle of prompt architecture:
+Implement RAG-based architecture by ingesting CMS/NCCI datasets to eliminate LLM hallucinations in medical audit results.
+
 use persona adoption to tailor the execution and output.
 
 Use negative contraints to enforce data privacy, such as not including SSN in output, not saving uploaded documents or personal information.
