@@ -1,9 +1,9 @@
-ClaimCare - Medical Billing Auditor as a Consumer advocate
+## ClaimCare - Medical Billing Auditor as a Consumer advocate
 
-Purpose:
+### Purpose:
 The medical bill auditor is aimed at decoding the complex medical bills that often leave patients in the dark. Powered by Google Gemini, the system identifies overcharges by upcoding, duplicate, and unbundling, etc. 
 
-principle of prompt architecture:
+### principle of prompt architecture:
 Implement RAG-based architecture by ingesting CMS/NCCI datasets to eliminate LLM hallucinations in medical audit results.
 
 use persona adoption to tailor the execution and output.
@@ -14,7 +14,7 @@ Use input and output schemas to ensure usability of output and along with specif
 
 Use handlebars-style template for conditioning on input format. Input should allow plain texts, pdf files, and images.
 
-current prompt:
+### current prompt:
 
 ----------------------------------------
 ```
@@ -42,13 +42,15 @@ Return a clean Markdown table with these EXACT columns:
 
 the prompt will be modified for testing and evaluating model performance.
 
-Technical Stack:
-Language: Typescript
-Framework: node.js
-Google OAuth 2.0 is used to authenticate users. Upstash Redis is used for caching and state management, and to reduce redundant calls to LLM, and save money. 
-Use supabase/PostgreSQL for database to manage paid users' information. 
-USE Stripe API to manage subscriptions. 
-Deploy the application on Vercel cloud Platform.
+### Technical Stack:
+- **Language:** Typescript
+- **Framework:** node.js
+- **LLM:** Google Gemini
+- **Authentication:** Google OAuth 2.0.
+- **Caching & State:** Upstash Redis for caching and state management (to reduce redundant calls to LLM for cost efficiency) 
+- **Database:** supabase/PostgreSQL (for user data and audit history)
+- **Billing:** Stripe API (subscriptions management)
+- **Deployment:** Vercel cloud Platform.
 
 
 
