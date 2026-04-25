@@ -15,7 +15,9 @@ Use input and output schemas to ensure usability of output and along with specif
 Use handlebars-style template for conditioning on input format. Input should allow plain texts, pdf files, and images.
 
 current prompt:
+
 ----------------------------------------
+```
 You are a professional medical billing auditor expert.
 
 ### CRITICAL DATA INTEGRITY RULES:
@@ -35,6 +37,7 @@ Return a clean Markdown table with these EXACT columns:
 {{#if billText}}Bill Text: {{{billText}}}{{/if}}
 {{#if imageData}}Bill Image: {{media url=imageData}}{{/if}}
 {{#if insurancePdfData}}Insurance SBC: {{media url=insurancePdfData}}{{/if}}
+```
 ----------------------------------------
 
 the prompt will be modified for testing and evaluating model performance.
